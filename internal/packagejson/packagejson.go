@@ -10,6 +10,7 @@ import (
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
+	"github.com/GNURub/node-package-updater/internal/ui"
 )
 
 type PackageJSON struct {
@@ -89,8 +90,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		deps.FetchNewVersions(flags)
 	}
 
+	toUpdate := allDeps
 	if flags.Interactive {
-
+		toUpdate, _ = ui.SelectDependencies(allDeps)
 	}
 
 	// selectedDeps := allDeps
@@ -123,26 +125,24 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	// 	updatedDeps[name] = newVersion
 	// }
 
-	// return p.updatePackageJSON(updatedDeps)
-
-	return nil
+	return p.updatePackageJSON(toUpdate)
 }
 
 func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Dependencies) error {
 	for _, dep := range updatedDeps["prod"] {
-		if _, ok := p.Dependencies[dep.PackageName]; ok {
+		if _, ok := p.Dependencies[dep.PackageName]; ok && dep.HaveToUpdate {
 			p.Dependencies[dep.PackageName] = dep.NextVersion
 		}
 	}
 
 	for _, dep := range updatedDeps["dev"] {
-		if _, ok := p.DevDependencies[dep.PackageName]; ok {
+		if _, ok := p.DevDependencies[dep.PackageName]; ok && dep.HaveToUpdate {
 			p.DevDependencies[dep.PackageName] = dep.NextVersion
 		}
 	}
 
 	for _, dep := range updatedDeps["peer"] {
-		if _, ok := p.PeerDependencies[dep.PackageName]; ok {
+		if _, ok := p.PeerDependencies[dep.PackageName]; ok && dep.HaveToUpdate {
 			p.PeerDependencies[dep.PackageName] = dep.NextVersion
 		}
 	}

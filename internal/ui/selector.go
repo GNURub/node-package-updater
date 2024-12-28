@@ -115,17 +115,19 @@ func (m model) View() string {
 	return s.String()
 }
 
-func SelectDependencies(deps map[string]dependency.Dependencies) ([]string, error) {
+func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dependency.Dependencies, error) {
 	var dependencies []Dependency
 
 	// Agregar dependencias regulares
 	for env, deps := range deps {
 		for _, dep := range deps {
-			dependencies = append(dependencies, Dependency{
-				Name:    dep.PackageName,
-				Version: dep.NextVersion,
-				Type:    env,
-			})
+			if dep.NextVersion != "" {
+				dependencies = append(dependencies, Dependency{
+					Name:    dep.PackageName,
+					Version: dep.NextVersion,
+					Type:    env,
+				})
+			}
 		}
 	}
 
@@ -174,10 +176,15 @@ func SelectDependencies(deps map[string]dependency.Dependencies) ([]string, erro
 		return nil, fmt.Errorf("selección cancelada por el usuario")
 	}
 
-	var selectedDeps []string
 	for idx := range m.selected {
-		selectedDeps = append(selectedDeps, m.dependencies[idx].Name)
+		dep := m.dependencies[idx]
+
+		for i, d := range deps[dep.Type] {
+			if d.PackageName == dep.Name {
+				deps[dep.Type][i].HaveToUpdate = true
+			}
+		}
 	}
 
-	return selectedDeps, nil
+	return deps, nil
 }

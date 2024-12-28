@@ -1,5 +1,13 @@
 {
+  "PackageManager": {
+    "Name": "npm",
+    "LockFile": "package-lock.json"
+  },
+  "Path": "package.json",
   "dependencies": {
-    "@angular/material": ">=9.2.3"
-  }
+    "@angular/material": "19.0.4"
+  },
+  "devDependencies": null,
+  "peerDependencies": null,
+  "workspaces": null
 }
