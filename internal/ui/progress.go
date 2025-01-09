@@ -61,11 +61,6 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if percentage >= 1.0 {
 			m.done = true
-			return m, tea.Sequence(
-				m.progress.SetPercent(1.0),
-				tea.ClearScreen,
-				tea.Quit,
-			)
 		}
 
 		cmd := m.progress.SetPercent(percentage)

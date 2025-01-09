@@ -88,6 +88,11 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	totalDeps := len(allDeps["prod"]) + len(allDeps["dev"]) + len(allDeps["peer"])
+
+	if totalDeps == 0 {
+		return fmt.Errorf("no dependencies found")
+	}
+
 	currentPackage := make(chan string, totalDeps)
 	processed := make(chan bool, totalDeps)
 	packageUpdateNotifier := make(chan bool)
@@ -113,11 +118,11 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 				currentProcessed++
 
 				percentage := float64(currentProcessed) / float64(totalDeps)
+
 				bar.Send(ui.ProgressMsg{
 					Percentage:          percentage,
 					CurrentPackageIndex: currentProcessed,
 				})
-
 				if currentProcessed == totalDeps {
 					done <- true
 				}
@@ -128,8 +133,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}()
 
 	<-done
+
 	bar.ReleaseTerminal()
-	bar.Quit()
+	bar.Kill()
 
 	if !someNewVersion {
 		return nil

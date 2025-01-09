@@ -43,7 +43,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i := 0; i < len(m.table.Rows()); i++ {
 				m.selected[i] = struct{}{}
 			}
-			return m, nil
 		case "q", "ctrl+c":
 			m.quitting = true
 
