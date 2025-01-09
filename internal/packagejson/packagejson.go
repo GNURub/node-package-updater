@@ -98,9 +98,13 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	packageUpdateNotifier := make(chan bool)
 	done := make(chan bool)
 	someNewVersion := false
-	bar := ui.ShowProgressBar(
+	bar, err := ui.ShowProgressBar(
 		totalDeps,
 	)
+
+	if err != nil {
+		return fmt.Errorf("error showing progress bar: %v", err)
+	}
 
 	for _, envDeps := range allDeps {
 		go func(deps dependency.Dependencies) {
@@ -132,6 +136,10 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}()
 
+	if _, err := bar.Run(); err != nil {
+		return fmt.Errorf("error running program: %w", err)
+	}
+
 	<-done
 
 	bar.ReleaseTerminal()
@@ -152,7 +160,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
-	err := p.updatePackageJSON(toUpdate)
+	err = p.updatePackageJSON(toUpdate)
 
 	if err != nil {
 		return fmt.Errorf("error updating package.json: %v", err)

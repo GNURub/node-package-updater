@@ -27,6 +27,7 @@ type progressModel struct {
 }
 
 var (
+	quitMessage         = tea.Sequence(tea.ShowCursor, tea.Quit)
 	currentPkgNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
 	style               = lipgloss.NewStyle().Margin(1, 2)
 )
@@ -61,6 +62,8 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if percentage >= 1.0 {
 			m.done = true
+
+			return m, quitMessage
 		}
 
 		cmd := m.progress.SetPercent(percentage)
@@ -102,15 +105,15 @@ func (m progressModel) View() string {
 }
 
 // ShowProgressBar inicia y muestra la barra de progreso.
-func ShowProgressBar(total int) *tea.Program {
+func ShowProgressBar(total int) (*tea.Program, error) {
 	model := NewProgress(total)
 	program := tea.NewProgram(model)
 
-	go func() {
-		if _, err := program.Run(); err != nil {
-			fmt.Printf("Error running progress: %v", err)
-		}
-	}()
+	// go func() {
+	// 	if _, err := program.Run(); err != nil {
+	// 		fmt.Println("Error starting program:", err)
+	// 	}
+	// }()
 
-	return program
+	return program, nil
 }
