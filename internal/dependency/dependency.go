@@ -19,31 +19,22 @@ type Dependency struct {
 	CurrentVersion string
 	NextVersion    string
 	HaveToUpdate   bool
+	Env            string
 }
 
 type Dependencies []*Dependency
-
-func (d Dependencies) FetchNewVersions(flags *cli.Flags) {
-	for _, dep := range d {
-		newVersion, err := dep.GetNewVersion(flags)
-		if err != nil {
-			continue
-		}
-
-		dep.NextVersion = newVersion
-	}
-}
 
 // httpClient es un cliente HTTP reutilizable con timeout
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-func NewDependency(packageName, currentVersion string) (*Dependency, error) {
+func NewDependency(packageName, currentVersion, env string) (*Dependency, error) {
 	return &Dependency{
 		PackageName:    packageName,
 		CurrentVersion: currentVersion,
 		NextVersion:    "",
+		Env:            env,
 		HaveToUpdate:   false,
 	}, nil
 }
@@ -63,6 +54,10 @@ func (d *Dependency) GetNewVersion(flags *cli.Flags) (string, error) {
 
 	if err != nil {
 		return "", fmt.Errorf("error getting updated version: %w", err)
+	}
+
+	if newVersion == nil {
+		return "", nil
 	}
 
 	return newVersion.String(), nil

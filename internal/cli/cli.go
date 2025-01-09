@@ -9,7 +9,7 @@ type Flags struct {
 	Minor            bool
 	Patch            bool
 	Workspaces       bool
-	Interactive      bool
+	NoInteractive    bool
 	Production       bool
 	PeerDependencies bool
 	MaintainSemver   bool
@@ -19,7 +19,7 @@ type Flags struct {
 func ParseFlags() *Flags {
 	flags := &Flags{}
 
-	flag.BoolVar(&flags.Interactive, "i", false, "Interactive mode")
+	flag.BoolVar(&flags.NoInteractive, "ni", false, "Interactive mode")
 	flag.BoolVar(&flags.MaintainSemver, "m", true, "Maintain semver satisfaction")
 	flag.BoolVar(&flags.Production, "p", false, "Update only production dependencies")
 	flag.BoolVar(&flags.Major, "major", false, "Update to latest major versions")

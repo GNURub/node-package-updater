@@ -11,15 +11,16 @@ import (
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/ui"
+	"github.com/GNURub/node-package-updater/internal/updater"
 )
 
 type PackageJSON struct {
 	PackageManager   packagemanager.PackageManager
 	Path             string
-	Dependencies     map[string]string `json:"dependencies"`
-	DevDependencies  map[string]string `json:"devDependencies"`
-	PeerDependencies map[string]string `json:"peerDependencies"`
-	Workspaces       []string          `json:"workspaces"`
+	Dependencies     map[string]string `json:"dependencies,omitempty"`
+	DevDependencies  map[string]string `json:"devDependencies,omitempty"`
+	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
+	Workspaces       []string          `json:"workspaces,omitempty"`
 }
 
 func LoadPackageJSON(dir string) (*PackageJSON, error) {
@@ -57,7 +58,7 @@ func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	allDeps := make(map[string]dependency.Dependencies)
 	for name, version := range p.Dependencies {
-		d, err := dependency.NewDependency(name, version)
+		d, err := dependency.NewDependency(name, version, "prod")
 
 		if err == nil {
 			allDeps["prod"] = append(allDeps["prod"], d)
@@ -68,7 +69,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	if !flags.Production {
 		for name, version := range p.DevDependencies {
-			d, err := dependency.NewDependency(name, version)
+			d, err := dependency.NewDependency(name, version, "dev")
 
 			if err == nil {
 				allDeps["dev"] = append(allDeps["dev"], d)
@@ -77,7 +78,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 		if flags.PeerDependencies {
 			for name, version := range p.PeerDependencies {
-				d, err := dependency.NewDependency(name, version)
+				d, err := dependency.NewDependency(name, version, "peer")
 
 				if err == nil {
 					allDeps["peer"] = append(allDeps["peer"], d)
@@ -86,46 +87,73 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
-	for _, deps := range allDeps {
-		deps.FetchNewVersions(flags)
+	totalDeps := len(allDeps["prod"]) + len(allDeps["dev"]) + len(allDeps["peer"])
+	currentPackage := make(chan string, totalDeps)
+	processed := make(chan bool, totalDeps)
+	packageUpdateNotifier := make(chan bool)
+	done := make(chan bool)
+	someNewVersion := false
+	bar := ui.ShowProgressBar(
+		totalDeps,
+	)
+
+	for _, envDeps := range allDeps {
+		go func(deps dependency.Dependencies) {
+			updater.FetchNewVersions(deps, flags, processed, currentPackage, packageUpdateNotifier)
+		}(envDeps)
+	}
+
+	currentProcessed := 0
+	go func() {
+		for {
+			select {
+			case packageName := <-currentPackage:
+				bar.Send(packageName)
+			case <-processed:
+				currentProcessed++
+				bar.Send(currentProcessed)
+
+				percentage := float64(currentProcessed) / float64(totalDeps) * 100
+				bar.Send(ui.ProgressMsg(percentage))
+
+				if currentProcessed == totalDeps {
+					done <- true
+				}
+			case <-packageUpdateNotifier:
+				someNewVersion = true
+			}
+		}
+	}()
+
+	<-done
+	bar.ReleaseTerminal()
+	bar.Kill()
+
+	if !someNewVersion {
+		fmt.Println("All dependencies are up to date")
+		return nil
 	}
 
 	toUpdate := allDeps
-	if flags.Interactive {
+	if !flags.NoInteractive {
 		toUpdate, _ = ui.SelectDependencies(allDeps)
+	} else {
+		for _, envDeps := range allDeps {
+			for _, dep := range envDeps {
+				dep.HaveToUpdate = dep.NextVersion != ""
+			}
+		}
 	}
 
-	// selectedDeps := allDeps
-	// if flags.Interactive {
-	// 	var items []string
-	// 	for name := range allDeps {
-	// 		items = append(items, name)
-	// 	}
+	err := p.updatePackageJSON(toUpdate)
 
-	// 	prompt := promptui.Select{
-	// 		Label: "Select dependencies to update (space to select, enter to confirm)",
-	// 		Items: items,
-	// 		Size:  20,
-	// 	}
+	if err != nil {
+		return fmt.Errorf("error updating package.json: %v", err)
+	}
 
-	// 	selectedDeps = make(map[string]string)
-	// 	_, result, err := prompt.Run()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	selectedDeps[result] = allDeps[result]
-	// }
+	fmt.Println("All dependencies processed")
 
-	// updatedDeps := make(map[string]string)
-	// for name, version := range selectedDeps {
-	// 	newVersion, err := dependency.GetNewVersion(name, version, flags)
-	// 	if err != nil {
-	// 		return fmt.Errorf("error updating %s: %v", name, err)
-	// 	}
-	// 	updatedDeps[name] = newVersion
-	// }
-
-	return p.updatePackageJSON(toUpdate)
+	return nil
 }
 
 func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Dependencies) error {
@@ -149,7 +177,7 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("error serializing package.json: %v", err)
 	}
 
 	return os.WriteFile(p.Path, data, 0644)

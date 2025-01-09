@@ -9,6 +9,7 @@ import (
 )
 
 type VersionManager struct {
+	latest         bool
 	currentVersion *semver.Version
 	currentReq     *semver.Constraints
 	versions       []*semver.Version
@@ -18,33 +19,17 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 	currentOnlyVersion := strings.TrimLeft(current, ">=<^~")
 	currentOnlyVersion = strings.TrimSpace(currentOnlyVersion)
 
-	currentVersion, err := semver.NewVersion(currentOnlyVersion)
-
-	if err != nil {
-		return nil, err
-	}
+	currentVersion, _ := semver.NewVersion(currentOnlyVersion)
 
 	var currentReq *semver.Constraints
 	if flags.Major {
-		currentReq, err = semver.NewConstraint(fmt.Sprintf(">=%s", currentOnlyVersion))
-		if err != nil {
-			return nil, err
-		}
+		currentReq, _ = semver.NewConstraint(fmt.Sprintf(">=%s", currentOnlyVersion))
 	} else if flags.Minor {
-		currentReq, err = semver.NewConstraint(fmt.Sprintf("^%s", currentOnlyVersion))
-		if err != nil {
-			return nil, err
-		}
+		currentReq, _ = semver.NewConstraint(fmt.Sprintf("^%s", currentOnlyVersion))
 	} else if flags.Patch {
-		currentReq, err = semver.NewConstraint(fmt.Sprintf("~%s", currentOnlyVersion))
-		if err != nil {
-			return nil, err
-		}
+		currentReq, _ = semver.NewConstraint(fmt.Sprintf("~%s", currentOnlyVersion))
 	} else {
-		currentReq, err = semver.NewConstraint(current)
-		if err != nil {
-			return nil, err
-		}
+		currentReq, _ = semver.NewConstraint(current)
 	}
 
 	var parsedVersions []*semver.Version
@@ -57,6 +42,7 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 	}
 
 	return &VersionManager{
+		latest:         current == "latest" || current == "*" || current == "",
 		currentVersion: currentVersion,
 		currentReq:     currentReq,
 		versions:       parsedVersions,
@@ -66,6 +52,11 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, error) {
 	var latestVersion *semver.Version
 	for _, v := range vm.versions {
+		if vm.latest || vm.currentReq == nil {
+			latestVersion = v
+			break
+		}
+
 		if vm.currentReq.Check(v) && (latestVersion == nil || v.GreaterThan(latestVersion)) {
 			latestVersion = v
 		}
@@ -73,6 +64,10 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, 
 
 	if latestVersion == nil {
 		return nil, fmt.Errorf("no matching version found")
+	}
+
+	if vm.currentVersion.Equal(latestVersion) {
+		return nil, nil
 	}
 
 	return latestVersion, nil

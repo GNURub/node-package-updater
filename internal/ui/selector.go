@@ -10,30 +10,18 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type Dependency struct {
-	Name       string
-	Version    string
-	IsSelected bool
-	Type       string // "dependencies" o "devDependencies"
-}
-
 type model struct {
-	dependencies []Dependency
-	cursor       int
+	dependencies dependency.Dependencies
 	selected     map[int]struct{}
 	quitting     bool
+	done         bool
 	table        table.Model
 }
 
 var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FF75B7")).
-			MarginLeft(2)
-
 	baseStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#63B0B8"))
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#63B0B8"))
 )
 
 func (m model) Init() tea.Cmd {
@@ -41,111 +29,121 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		case " ": // Espacio para seleccionar
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
+		case "esc":
+			if m.table.Focused() {
+				m.table.Blur()
 			} else {
-				m.selected[m.cursor] = struct{}{}
+				m.table.Focus()
 			}
+		case "ctrl+a":
+			for i := 0; i < len(m.table.Rows()); i++ {
+				m.selected[i] = struct{}{}
+			}
+			return m, nil
+		case "q", "ctrl+c":
+			m.quitting = true
+
+			m.selected = make(map[int]struct{})
+
+			return m, tea.Sequence(
+				tea.ClearScreen,
+				tea.Quit,
+			)
 		case "enter":
-			return m, tea.Quit
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(m.dependencies)-1 {
-				m.cursor++
+			m.done = true
+			return m, tea.Sequence(
+				tea.ClearScreen,
+				tea.Quit,
+			)
+		case " ":
+			cursor := m.table.Cursor()
+			_, ok := m.selected[cursor]
+			if ok {
+				delete(m.selected, cursor)
+			} else {
+				m.selected[cursor] = struct{}{}
 			}
 		}
 	}
 
-	var cmd tea.Cmd
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
 }
 
 func (m model) View() string {
-	if m.quitting {
-		return "Operación cancelada\n"
-	}
-
 	var s strings.Builder
-
-	s.WriteString(titleStyle.Render("Selecciona las dependencias a actualizar\n\n"))
-
-	// Crear filas para la tabla
-	var rows []table.Row
-	for i, dep := range m.dependencies {
-		selected := " "
-		if _, ok := m.selected[i]; ok {
-			selected = "×"
-		}
-
-		style := ""
-		if i == m.cursor {
-			style = "→"
-		} else {
-			style = " "
-		}
-
-		rows = append(rows, table.Row{
-			style + selected,
-			dep.Name,
-			dep.Version,
-			dep.Type,
-		})
+	if m.quitting || m.done {
+		s.WriteString("")
+		return s.String()
 	}
 
-	// Actualizar tabla
+	rows := m.table.Rows()
+	for i := range rows {
+		if _, ok := m.selected[i]; ok {
+			rows[i][0] = "✔"
+		} else {
+			rows[i][0] = ""
+		}
+	}
+
 	m.table.SetRows(rows)
+
 	s.WriteString(baseStyle.Render(m.table.View()) + "\n\n")
 
 	s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(
-		"↑/↓: navegar • espacio: seleccionar • enter: confirmar • q: cancelar\n",
+		"↑/↓: navigate • space: select • enter: confirm • q: quit\n",
 	))
 
 	return s.String()
 }
 
 func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dependency.Dependencies, error) {
-	var dependencies []Dependency
+	var dependencies dependency.Dependencies
 
-	// Agregar dependencias regulares
-	for env, deps := range deps {
-		for _, dep := range deps {
+	// Add regular dependencies
+	for _, envDeps := range deps {
+		for _, dep := range envDeps {
 			if dep.NextVersion != "" {
-				dependencies = append(dependencies, Dependency{
-					Name:    dep.PackageName,
-					Version: dep.NextVersion,
-					Type:    env,
-				})
+				// Create a copy of the dependency
+				depCopy := dep
+				depCopy.HaveToUpdate = false // Reset update flag
+				dependencies = append(dependencies, depCopy)
 			}
 		}
 	}
 
-	// Configurar columnas de la tabla
+	// Configure table columns
 	columns := []table.Column{
-		{Title: " ", Width: 3},
-		{Title: "Dependencia", Width: 30},
-		{Title: "Versión", Width: 15},
-		{Title: "Tipo", Width: 15},
+		{Title: "", Width: 2},
+		{Title: "Dependency", Width: 30},
+		{Title: "Current Version", Width: 15},
+		{Title: "New Version", Width: 15},
+		{Title: "Type", Width: 15},
+	}
+
+	var rows []table.Row
+	for _, dep := range dependencies {
+		rows = append(rows, table.Row{
+			"",
+			dep.PackageName,
+			dep.CurrentVersion,
+			dep.NextVersion,
+			dep.Env,
+		})
 	}
 
 	t := table.New(
 		table.WithColumns(columns),
+		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(10),
+		table.WithHeight(7),
 	)
 
-	// Estilo de la tabla
+	// Table styles
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -170,18 +168,20 @@ func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dep
 		return nil, fmt.Errorf("error running bubbletea program: %w", err)
 	}
 
-	// Obtener dependencias seleccionadas
+	// Get selected dependencies
 	m := finalModel.(model)
 	if m.quitting {
-		return nil, fmt.Errorf("selección cancelada por el usuario")
+		return nil, fmt.Errorf("selection cancelled by user")
 	}
 
+	// Update the selected dependencies
 	for idx := range m.selected {
-		dep := m.dependencies[idx]
+		selectedDep := m.dependencies[idx]
 
-		for i, d := range deps[dep.Type] {
-			if d.PackageName == dep.Name {
-				deps[dep.Type][i].HaveToUpdate = true
+		for i, dep := range deps[selectedDep.Env] {
+			if dep.PackageName == selectedDep.PackageName {
+				deps[selectedDep.Env][i].HaveToUpdate = true
+				break
 			}
 		}
 	}
