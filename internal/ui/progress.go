@@ -9,24 +9,29 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type ProgressMsg float64
+type ProgressMsg struct {
+	Percentage          float64
+	CurrentPackageIndex int
+}
+type PackageName string
 
+// progressModel representa el modelo de progreso.
 type progressModel struct {
 	progress    progress.Model
 	total       int
 	packageName string
-	err         error
 	index       int
+	done        bool
 	width       int
 	height      int
-	done        bool
 }
 
 var (
 	currentPkgNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
-	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
+	style               = lipgloss.NewStyle().Margin(1, 2)
 )
 
+// NewProgress inicializa un nuevo modelo de progreso.
 func NewProgress(total int) *progressModel {
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -51,28 +56,23 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 
 	case ProgressMsg:
-		percentage := float64(msg)
-		if percentage >= 100 {
+		percentage := msg.Percentage
+		m.index = msg.CurrentPackageIndex
+
+		if percentage >= 1.0 {
 			m.done = true
 			return m, tea.Sequence(
-				m.progress.SetPercent(100),
+				m.progress.SetPercent(1.0),
 				tea.ClearScreen,
-				tea.Quit, // exit the program
+				tea.Quit,
 			)
 		}
 
 		cmd := m.progress.SetPercent(percentage)
 		return m, cmd
 
-	case error:
-		m.err = msg
-		return m, tea.Quit
-
-	case string:
-		m.packageName = msg
-
-	case int:
-		m.index = msg
+	case PackageName:
+		m.packageName = string(msg)
 
 	case progress.FrameMsg:
 		newModel, cmd := m.progress.Update(msg)
@@ -86,16 +86,12 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m progressModel) View() string {
-	w := lipgloss.Width(fmt.Sprintf("%d", m.total))
+	if m.done {
+		return style.Render("🎉! All dependencies updated successfully!\n")
+	}
 
 	var s strings.Builder
-
-	style := lipgloss.NewStyle().Margin(1, 2)
-
-	if m.done {
-		s.WriteString("")
-		return s.String()
-	}
+	w := lipgloss.Width(fmt.Sprintf("%d", m.total))
 
 	if m.packageName != "" {
 		pkgName := currentPkgNameStyle.Render(m.packageName)
@@ -107,10 +103,10 @@ func (m progressModel) View() string {
 	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, m.total)
 
 	s.WriteString(pad + prog + pkgCount + "\n")
-
 	return style.Render(s.String())
 }
 
+// ShowProgressBar inicia y muestra la barra de progreso.
 func ShowProgressBar(total int) *tea.Program {
 	model := NewProgress(total)
 	program := tea.NewProgram(model)

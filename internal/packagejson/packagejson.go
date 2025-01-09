@@ -108,13 +108,15 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		for {
 			select {
 			case packageName := <-currentPackage:
-				bar.Send(packageName)
+				bar.Send(ui.PackageName(packageName))
 			case <-processed:
 				currentProcessed++
-				bar.Send(currentProcessed)
 
-				percentage := float64(currentProcessed) / float64(totalDeps) * 100
-				bar.Send(ui.ProgressMsg(percentage))
+				percentage := float64(currentProcessed) / float64(totalDeps)
+				bar.Send(ui.ProgressMsg{
+					Percentage:          percentage,
+					CurrentPackageIndex: currentProcessed,
+				})
 
 				if currentProcessed == totalDeps {
 					done <- true
@@ -127,10 +129,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	<-done
 	bar.ReleaseTerminal()
-	bar.Kill()
+	bar.Quit()
 
 	if !someNewVersion {
-		fmt.Println("All dependencies are up to date")
 		return nil
 	}
 
