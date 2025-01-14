@@ -9,10 +9,11 @@ import (
 )
 
 type VersionManager struct {
-	latest         bool
-	currentVersion *semver.Version
-	currentReq     *semver.Constraints
-	versions       []*semver.Version
+	latest            bool
+	currentVersionStr string
+	currentVersion    *semver.Version
+	currentReq        *semver.Constraints
+	versions          []*semver.Version
 }
 
 func NewVersionManager(current string, versions []string, flags *cli.Flags) (*VersionManager, error) {
@@ -42,15 +43,17 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 	}
 
 	return &VersionManager{
-		latest:         current == "latest" || current == "*" || current == "",
-		currentVersion: currentVersion,
-		currentReq:     currentReq,
-		versions:       parsedVersions,
+		latest:            current == "latest" || current == "*" || current == "",
+		currentVersion:    currentVersion,
+		currentReq:        currentReq,
+		versions:          parsedVersions,
+		currentVersionStr: current,
 	}, nil
 }
 
 func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, error) {
 	var latestVersion *semver.Version
+
 	for _, v := range vm.versions {
 		if vm.latest || vm.currentReq == nil {
 			latestVersion = v
@@ -68,6 +71,14 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, 
 
 	if vm.currentVersion.Equal(latestVersion) {
 		return nil, nil
+	}
+
+	prefixes := []string{">=", ">", "^", "~"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(vm.currentVersionStr, prefix) {
+			latestVersion, _ = semver.NewVersion(fmt.Sprintf("%s%s", prefix, latestVersion))
+			break
+		}
 	}
 
 	return latestVersion, nil
