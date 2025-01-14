@@ -254,6 +254,13 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 	output := buf.String()
 	output = strings.ReplaceAll(output, `\u003e`, `>`)
 	output = strings.ReplaceAll(output, `\u003c`, `<`)
+	output = strings.ReplaceAll(output, `\u0026`, `&`)
+	output = strings.ReplaceAll(output, `\u0022`, `"`)
+	output = strings.ReplaceAll(output, `\u0027`, `'`)
+	output = strings.ReplaceAll(output, `\u002f`, `/`)
+	output = strings.ReplaceAll(output, `\u005c`, `\`)
+	output = strings.ReplaceAll(output, `\u002f`, `/`)
+	output = strings.ReplaceAll(output, `\u0000`, ``)
 
 	// Escribir el archivo actualizado
 	if err := os.WriteFile(p.packageFilePath, []byte(output), 0644); err != nil {
