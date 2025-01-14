@@ -38,3 +38,15 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 
 	wg.Wait()
 }
+
+func NeedToUpdate(allDeps map[string]dependency.Dependencies) bool {
+	for _, deps := range allDeps {
+		for _, dep := range deps {
+			if dep.HaveToUpdate {
+				return true
+			}
+		}
+	}
+
+	return false
+}

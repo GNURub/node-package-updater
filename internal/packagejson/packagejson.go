@@ -1,6 +1,7 @@
 package packagejson
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,32 +14,37 @@ import (
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/ui"
 	"github.com/GNURub/node-package-updater/internal/updater"
+	"github.com/iancoleman/orderedmap"
 )
 
-type PackageJSON struct {
-	packageFilePath  string
-	basedir          string
-	PackageManager   *packagemanager.PackageManager
-	Manager          string            `json:"packageManager,omitempty"`
-	Dependencies     map[string]string `json:"dependencies,omitempty"`
-	DevDependencies  map[string]string `json:"devDependencies,omitempty"`
-	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-	Workspaces       []string          `json:"workspaces,omitempty"`
-}
+type Option func(*PackageJSON)
 
-func WithPackageManager(manager string) func(*PackageJSON) {
-	return func(s *PackageJSON) {
-		s.Manager = manager
+type PackageJSON struct {
+	packageFilePath string
+	basedir         string
+	PackageManager  *packagemanager.PackageManager
+	JSON            struct {
+		Manager          string            `json:"packageManager,omitempty"`
+		Dependencies     map[string]string `json:"dependencies,omitempty"`
+		DevDependencies  map[string]string `json:"devDependencies,omitempty"`
+		PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
+		Workspaces       []string          `json:"workspaces,omitempty"`
 	}
 }
 
-func WithBaseDir(basedir string) func(*PackageJSON) {
+func WithPackageManager(manager string) Option {
+	return func(s *PackageJSON) {
+		s.JSON.Manager = manager
+	}
+}
+
+func WithBaseDir(basedir string) Option {
 	return func(s *PackageJSON) {
 		s.basedir = basedir
 	}
 }
 
-func LoadPackageJSON(options ...func(*PackageJSON)) (*PackageJSON, error) {
+func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 	pkg := &PackageJSON{}
 
 	for _, o := range options {
@@ -51,11 +57,11 @@ func LoadPackageJSON(options ...func(*PackageJSON)) (*PackageJSON, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(data, pkg); err != nil {
+	if err := json.Unmarshal(data, &pkg.JSON); err != nil {
 		return nil, err
 	}
 
-	pkg.PackageManager = packagemanager.Detect(path.Base(fullPackageJSONPath), pkg.Manager)
+	pkg.PackageManager = packagemanager.Detect(path.Base(fullPackageJSONPath), pkg.JSON.Manager)
 
 	pkg.packageFilePath = fullPackageJSONPath
 	return pkg, nil
@@ -63,7 +69,7 @@ func LoadPackageJSON(options ...func(*PackageJSON)) (*PackageJSON, error) {
 
 func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 	var workspacePaths []string
-	for _, workspace := range p.Workspaces {
+	for _, workspace := range p.JSON.Workspaces {
 		matches, err := filepath.Glob(workspace)
 		if err != nil {
 			return nil, err
@@ -77,7 +83,7 @@ func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	allDeps := make(map[string]dependency.Dependencies)
-	for name, version := range p.Dependencies {
+	for name, version := range p.JSON.Dependencies {
 		d, err := dependency.NewDependency(name, version, "prod")
 
 		if err == nil {
@@ -88,7 +94,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	if !flags.Production {
-		for name, version := range p.DevDependencies {
+		for name, version := range p.JSON.DevDependencies {
 			d, err := dependency.NewDependency(name, version, "dev")
 
 			if err == nil {
@@ -97,7 +103,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 
 		if flags.PeerDependencies {
-			for name, version := range p.PeerDependencies {
+			for name, version := range p.JSON.PeerDependencies {
 				d, err := dependency.NewDependency(name, version, "peer")
 
 				if err == nil {
@@ -156,9 +162,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}()
 
-	if _, err := bar.Run(); err != nil {
-		return fmt.Errorf("error running program: %w", err)
-	}
+	bar.Run()
 
 	<-done
 
@@ -180,6 +184,12 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
+	// Comprobamos si hay que actualizar las dependencias
+	if !updater.NeedToUpdate(toUpdate) {
+		fmt.Println("No dependencies to update")
+		return nil
+	}
+
 	err = p.updatePackageJSON(toUpdate)
 
 	if err != nil {
@@ -198,28 +208,51 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 }
 
 func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Dependencies) error {
-	for _, dep := range updatedDeps["prod"] {
-		if _, ok := p.Dependencies[dep.PackageName]; ok && dep.HaveToUpdate {
-			p.Dependencies[dep.PackageName] = dep.NextVersion
-		}
-	}
-
-	for _, dep := range updatedDeps["dev"] {
-		if _, ok := p.DevDependencies[dep.PackageName]; ok && dep.HaveToUpdate {
-			p.DevDependencies[dep.PackageName] = dep.NextVersion
-		}
-	}
-
-	for _, dep := range updatedDeps["peer"] {
-		if _, ok := p.PeerDependencies[dep.PackageName]; ok && dep.HaveToUpdate {
-			p.PeerDependencies[dep.PackageName] = dep.NextVersion
-		}
-	}
-
-	data, err := json.MarshalIndent(p, "", "  ")
+	// Leer el archivo original
+	originalData, err := os.ReadFile(p.packageFilePath)
 	if err != nil {
-		return fmt.Errorf("error serializing package.json: %v", err)
+		return fmt.Errorf("error reading package.json: %v", err)
 	}
 
-	return os.WriteFile(p.packageFilePath, data, 0644)
+	orderedJSON := orderedmap.New()
+	if err := json.Unmarshal(originalData, &orderedJSON); err != nil {
+		return fmt.Errorf("error unmarshalling package.json: %v", err)
+	}
+
+	depSections := map[string]string{
+		"prod": "dependencies",
+		"dev":  "devDependencies",
+		"peer": "peerDependencies",
+	}
+
+	for envType, section := range depSections {
+		if depsValue, ok := orderedJSON.Get(section); ok {
+			if depsMap, ok := depsValue.(orderedmap.OrderedMap); ok {
+				// Luego actualizar las que han cambiado
+				for _, dep := range updatedDeps[envType] {
+					if dep.HaveToUpdate {
+						depsMap.Set(dep.PackageName, dep.NextVersion)
+					}
+				}
+			}
+		}
+	}
+
+	// Convertir a JSON manteniendo el formato
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
+
+	if err := encoder.Encode(orderedJSON); err != nil {
+		return fmt.Errorf("error serializing updated package.json: %v", err)
+	}
+
+	jsonBytes := bytes.TrimRight(buf.Bytes(), "\n")
+
+	if err := os.WriteFile(p.packageFilePath, jsonBytes, 0644); err != nil {
+		return fmt.Errorf("error writing updated package.json: %v", err)
+	}
+
+	return nil
 }

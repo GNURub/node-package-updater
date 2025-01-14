@@ -29,6 +29,7 @@ type Flags struct {
 	Timeout          int
 	NoInstall        bool
 	ShowVersion      bool
+	PackageManager   string
 }
 
 // arrayFlags permite manejar flags que aceptan múltiples valores
@@ -70,10 +71,11 @@ func ParseFlags() *Flags {
 	flag.BoolVar(&flags.NoInstall, "no", false, "Do not install packages after updating")
 	flag.BoolVar(&flags.NoInteractive, "ni", false, "Non-interactive mode")
 	flag.BoolVar(&flags.DryRun, "dry-run", false, "Show what would be updated without making changes")
+	flag.BoolVar(&flags.ShowVersion, "version", false, "Show version")
 	flag.BoolVar(&flags.Verbose, "verbose", false, "Show detailed output")
+	flag.StringVar(&flags.PackageManager, "pm", "", "Package manager to use (npm, yarn, pnpm, bun)")
 	flag.StringVar(&flags.LogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	flag.StringVar(&flags.OutputFormat, "output", "text", "Output format (text, json, yaml)")
-	flag.BoolVar(&flags.ShowVersion, "version", false, "Show version")
 
 	// Opciones de rendimiento
 	flag.IntVar(&flags.Timeout, "timeout", 30, "Timeout in seconds for each package update")
@@ -122,6 +124,12 @@ func ParseFlags() *Flags {
 	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLogLevels[flags.LogLevel] {
 		fmt.Fprintf(os.Stderr, "Error: Invalid log level. Must be one of: debug, info, warn, error\n")
+		os.Exit(1)
+	}
+
+	validPackageManagers := map[string]bool{"npm": true, "yarn": true, "pnpm": true, "bun": true}
+	if flags.PackageManager != "" && !validPackageManagers[flags.PackageManager] {
+		fmt.Fprintf(os.Stderr, "Error: Invalid package manager. Must be one of: npm, yarn, pnpm, bun\n")
 		os.Exit(1)
 	}
 

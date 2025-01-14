@@ -18,8 +18,16 @@ func main() {
 		return
 	}
 
-	pkg, err := packagejson.LoadPackageJSON(
+	options := []packagejson.Option{
 		packagejson.WithBaseDir(flags.BaseDir),
+	}
+
+	if flags.PackageManager != "" {
+		options = append(options, packagejson.WithPackageManager(flags.PackageManager))
+	}
+
+	pkg, err := packagejson.LoadPackageJSON(
+		options...,
 	)
 
 	if err != nil {
