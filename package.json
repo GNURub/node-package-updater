@@ -3,7 +3,7 @@
     "Name": "npm",
     "LockFile": "package-lock.json"
   },
-  "Path": "package.json",
+  "packageManager": "bun@1.0.0",
   "dependencies": {
     "@angular/material": "19.1.0-rc.0"
   },

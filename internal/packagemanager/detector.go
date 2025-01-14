@@ -3,7 +3,10 @@ package packagemanager
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 type PackageManager struct {
@@ -12,53 +15,78 @@ type PackageManager struct {
 }
 
 var (
-	Bun = PackageManager{
+	Bun = &PackageManager{
 		Name:     "bun",
 		LockFile: "bun.lockb",
 	}
 
-	Yarn = PackageManager{
+	Yarn = &PackageManager{
 		Name:     "yarn",
 		LockFile: "yarn.lock",
 	}
 
-	Pnpm = PackageManager{
+	Pnpm = &PackageManager{
 		Name:     "pnpm",
 		LockFile: "pnpm-lock.yaml",
 	}
 
-	Npm = PackageManager{
+	Npm = &PackageManager{
 		Name:     "npm",
 		LockFile: "package-lock.json",
 	}
 )
 
-func Detect(projectPath string) PackageManager {
-	// Buscar archivos de lock en orden de prioridad
-	lockFiles := []PackageManager{Bun, Yarn, Pnpm, Npm}
+func Detect(projectPath, manager string) *PackageManager {
+	supportedPackageManagers := []*PackageManager{Bun, Yarn, Pnpm, Npm}
 
-	for _, pm := range lockFiles {
-		lockPath := filepath.Join(projectPath, pm.LockFile)
-		if _, err := os.Stat(lockPath); err == nil {
-			return pm
+	if manager != "" {
+		for _, pm := range supportedPackageManagers {
+			if strings.Contains(manager, pm.Name) {
+				return pm
+			}
 		}
 	}
 
-	// Por defecto retorna npm si no se encuentra ningún archivo de lock
+	for _, pm := range supportedPackageManagers {
+		lockPath := filepath.Join(projectPath, pm.LockFile)
+		if _, err := os.Stat(lockPath); err == nil {
+			if _, err := exec.LookPath(pm.Name); err == nil {
+				return pm
+			}
+		}
+	}
+
 	return Npm
 }
 
-func (pm PackageManager) InstallCommand() string {
+func (pm *PackageManager) installCommand() []string {
 	switch pm {
 	case Bun:
-		return "bun install"
+		return []string{"bun", "install"}
 	case Yarn:
-		return "yarn install"
+		return []string{"yarn", "install"}
 	case Pnpm:
-		return "pnpm install"
+		return []string{"pnpm", "install"}
 	case Npm:
-		return "npm install"
+		return []string{"npm", "install"}
 	default:
-		return "npm install"
+		return []string{"npm", "install"}
 	}
+}
+
+func (pm *PackageManager) Install() error {
+	command := pm.installCommand()
+	var cmd *exec.Cmd
+
+	// Detecta la plataforma y selecciona el shell adecuado
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/C", strings.Join(command, " "))
+	default:
+		cmd = exec.Command("sh", "-c", strings.Join(command, " "))
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

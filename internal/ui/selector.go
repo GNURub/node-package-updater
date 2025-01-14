@@ -103,19 +103,16 @@ func (m model) View() string {
 func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dependency.Dependencies, error) {
 	var dependencies dependency.Dependencies
 
-	// Add regular dependencies
 	for _, envDeps := range deps {
 		for _, dep := range envDeps {
 			if dep.NextVersion != "" {
-				// Create a copy of the dependency
 				depCopy := dep
-				depCopy.HaveToUpdate = false // Reset update flag
+				depCopy.HaveToUpdate = false
 				dependencies = append(dependencies, depCopy)
 			}
 		}
 	}
 
-	// Configure table columns
 	columns := []table.Column{
 		{Title: "", Width: 2},
 		{Title: "Dependency", Width: 30},
@@ -142,7 +139,6 @@ func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dep
 		table.WithHeight(7),
 	)
 
-	// Table styles
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -167,13 +163,11 @@ func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dep
 		return nil, fmt.Errorf("error running bubbletea program: %w", err)
 	}
 
-	// Get selected dependencies
 	m := finalModel.(model)
 	if m.quitting {
 		return nil, fmt.Errorf("selection cancelled by user")
 	}
 
-	// Update the selected dependencies
 	for idx := range m.selected {
 		selectedDep := m.dependencies[idx]
 

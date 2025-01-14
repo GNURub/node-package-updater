@@ -27,6 +27,8 @@ type Flags struct {
 	Exclude          []string
 	ConfigFile       string
 	Timeout          int
+	NoInstall        bool
+	ShowVersion      bool
 }
 
 // arrayFlags permite manejar flags que aceptan múltiples valores
@@ -65,11 +67,13 @@ func ParseFlags() *Flags {
 	flag.BoolVar(&flags.Workspaces, "ws", false, "Include workspace repositories")
 
 	// Opciones de comportamiento
+	flag.BoolVar(&flags.NoInstall, "no", false, "Do not install packages after updating")
 	flag.BoolVar(&flags.NoInteractive, "ni", false, "Non-interactive mode")
 	flag.BoolVar(&flags.DryRun, "dry-run", false, "Show what would be updated without making changes")
 	flag.BoolVar(&flags.Verbose, "verbose", false, "Show detailed output")
 	flag.StringVar(&flags.LogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	flag.StringVar(&flags.OutputFormat, "output", "text", "Output format (text, json, yaml)")
+	flag.BoolVar(&flags.ShowVersion, "version", false, "Show version")
 
 	// Opciones de rendimiento
 	flag.IntVar(&flags.Timeout, "timeout", 30, "Timeout in seconds for each package update")
@@ -91,6 +95,7 @@ func ParseFlags() *Flags {
 		fmt.Fprintf(os.Stderr, "  -prod\tUpdate only production dependencies\n")
 		fmt.Fprintf(os.Stderr, "  -peer\tInclude peer dependencies\n")
 		fmt.Fprintf(os.Stderr, "\nBehavior Options:\n")
+		fmt.Fprintf(os.Stderr, "  -no\t\tDo not install packages after updating\n")
 		fmt.Fprintf(os.Stderr, "  -ni\t\tNon-interactive mode\n")
 		fmt.Fprintf(os.Stderr, "  -dry-run\tShow what would be updated without making changes\n")
 		fmt.Fprintf(os.Stderr, "  -verbose\tShow detailed output\n")

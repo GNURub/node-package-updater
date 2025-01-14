@@ -12,7 +12,6 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 	jobs := make(chan *dependency.Dependency, len(deps))
 	var wg sync.WaitGroup
 
-	// Start worker pool
 	wg.Add(numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		go func() {
@@ -32,12 +31,10 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		}()
 	}
 
-	// Send jobs to workers
 	for _, dep := range deps {
 		jobs <- dep
 	}
 	close(jobs)
 
-	// Wait for all workers to finish
 	wg.Wait()
 }

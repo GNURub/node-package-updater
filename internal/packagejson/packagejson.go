@@ -3,6 +3,7 @@ package packagejson
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,30 +16,49 @@ import (
 )
 
 type PackageJSON struct {
-	PackageManager   packagemanager.PackageManager
-	Path             string
+	packageFilePath  string
+	basedir          string
+	PackageManager   *packagemanager.PackageManager
+	Manager          string            `json:"packageManager,omitempty"`
 	Dependencies     map[string]string `json:"dependencies,omitempty"`
 	DevDependencies  map[string]string `json:"devDependencies,omitempty"`
 	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
 	Workspaces       []string          `json:"workspaces,omitempty"`
 }
 
-func LoadPackageJSON(dir string) (*PackageJSON, error) {
-	packagePath := path.Join(dir, "package.json")
-	data, err := os.ReadFile(packagePath)
+func WithPackageManager(manager string) func(*PackageJSON) {
+	return func(s *PackageJSON) {
+		s.Manager = manager
+	}
+}
+
+func WithBaseDir(basedir string) func(*PackageJSON) {
+	return func(s *PackageJSON) {
+		s.basedir = basedir
+	}
+}
+
+func LoadPackageJSON(options ...func(*PackageJSON)) (*PackageJSON, error) {
+	pkg := &PackageJSON{}
+
+	for _, o := range options {
+		o(pkg)
+	}
+
+	fullPackageJSONPath := path.Join(pkg.basedir, "package.json")
+	data, err := os.ReadFile(fullPackageJSONPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var pkg PackageJSON
-	if err := json.Unmarshal(data, &pkg); err != nil {
+	if err := json.Unmarshal(data, pkg); err != nil {
 		return nil, err
 	}
 
-	pkg.PackageManager = packagemanager.Detect(dir)
+	pkg.PackageManager = packagemanager.Detect(path.Base(fullPackageJSONPath), pkg.Manager)
 
-	pkg.Path = packagePath
-	return &pkg, nil
+	pkg.packageFilePath = fullPackageJSONPath
+	return pkg, nil
 }
 
 func (p *PackageJSON) GetWorkspaces() ([]string, error) {
@@ -168,6 +188,12 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	fmt.Println("All dependencies processed")
 
+	if !flags.NoInstall {
+		if err := p.PackageManager.Install(); err != nil {
+			log.Printf("Warning: Error installing workspace %s: %v", p.basedir, err)
+		}
+	}
+
 	return nil
 }
 
@@ -195,5 +221,5 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 		return fmt.Errorf("error serializing package.json: %v", err)
 	}
 
-	return os.WriteFile(p.Path, data, 0644)
+	return os.WriteFile(p.packageFilePath, data, 0644)
 }

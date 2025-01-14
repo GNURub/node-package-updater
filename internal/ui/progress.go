@@ -32,7 +32,6 @@ var (
 	style               = lipgloss.NewStyle().Margin(1, 2)
 )
 
-// NewProgress inicializa un nuevo modelo de progreso.
 func NewProgress(total int) *progressModel {
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -104,16 +103,9 @@ func (m progressModel) View() string {
 	return style.Render(s.String())
 }
 
-// ShowProgressBar inicia y muestra la barra de progreso.
 func ShowProgressBar(total int) (*tea.Program, error) {
 	model := NewProgress(total)
 	program := tea.NewProgram(model)
-
-	// go func() {
-	// 	if _, err := program.Run(); err != nil {
-	// 		fmt.Println("Error starting program:", err)
-	// 	}
-	// }()
 
 	return program, nil
 }
