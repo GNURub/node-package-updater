@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/dependency"
@@ -238,19 +239,24 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 		}
 	}
 
-	// Convertir a JSON manteniendo el formato
 	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	encoder.SetIndent("", "  ")
-	encoder.SetEscapeHTML(false)
+	enc := json.NewEncoder(&buf)
 
-	if err := encoder.Encode(orderedJSON); err != nil {
+	// Configurar el encoder para que no escape caracteres HTML
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+
+	if err := enc.Encode(orderedJSON); err != nil {
 		return fmt.Errorf("error serializing updated package.json: %v", err)
 	}
 
-	jsonBytes := bytes.TrimRight(buf.Bytes(), "\n")
+	// Opcional: realizar reemplazos adicionales si es necesario
+	output := buf.String()
+	output = strings.ReplaceAll(output, `\u003e`, `>`)
+	output = strings.ReplaceAll(output, `\u003c`, `<`)
 
-	if err := os.WriteFile(p.packageFilePath, jsonBytes, 0644); err != nil {
+	// Escribir el archivo actualizado
+	if err := os.WriteFile(p.packageFilePath, []byte(output), 0644); err != nil {
 		return fmt.Errorf("error writing updated package.json: %v", err)
 	}
 
