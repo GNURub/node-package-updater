@@ -8,28 +8,29 @@ import (
 )
 
 type Flags struct {
-	BaseDir          string
-	UpdateAll        bool
-	Major            bool
-	Minor            bool
-	Patch            bool
-	Workspaces       bool
-	NoInteractive    bool
-	Production       bool
-	PeerDependencies bool
-	MaintainSemver   bool
-	Registry         string
-	DryRun           bool
-	Verbose          bool
-	LogLevel         string
-	OutputFormat     string
-	Include          []string
-	Exclude          []string
-	ConfigFile       string
-	Timeout          int
-	NoInstall        bool
-	ShowVersion      bool
-	PackageManager   string
+	BaseDir           string
+	UpdateAll         bool
+	Major             bool
+	Minor             bool
+	Patch             bool
+	Workspaces        bool
+	NoInteractive     bool
+	Production        bool
+	PeerDependencies  bool
+	MaintainSemver    bool
+	Registry          string
+	DryRun            bool
+	Verbose           bool
+	LogLevel          string
+	OutputFormat      string
+	Include           []string
+	Exclude           []string
+	ConfigFile        string
+	Timeout           int
+	NoInstall         bool
+	ShowVersion       bool
+	PackageManager    string
+	KeepRangeOperator bool
 }
 
 // arrayFlags permite manejar flags que aceptan múltiples valores
@@ -59,6 +60,7 @@ func ParseFlags() *Flags {
 	flag.BoolVar(&flags.Minor, "minor", false, "Update to latest minor versions")
 	flag.BoolVar(&flags.Patch, "patch", false, "Update to latest patch versions")
 	flag.BoolVar(&flags.MaintainSemver, "m", true, "Maintain semver satisfaction")
+	flag.BoolVar(&flags.KeepRangeOperator, "k", true, "Keep range operator")
 
 	// Tipos de dependencias
 	flag.BoolVar(&flags.Production, "prod", false, "Update only production dependencies")

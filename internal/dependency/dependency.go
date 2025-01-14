@@ -112,11 +112,7 @@ func (d *Dependency) GetNewVersion(flags *cli.Flags) (string, error) {
 		return "", fmt.Errorf("error getting updated version: %w", err)
 	}
 
-	if newVersion == nil {
-		return "", nil
-	}
-
-	return newVersion.String(), nil
+	return newVersion, nil
 }
 
 func getVersionsFromRegistry(registry, packageName string) ([]string, error) {

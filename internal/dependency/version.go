@@ -51,7 +51,7 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 	}, nil
 }
 
-func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, error) {
+func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (string, error) {
 	var latestVersion *semver.Version
 
 	for _, v := range vm.versions {
@@ -66,20 +66,21 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, 
 	}
 
 	if latestVersion == nil {
-		return nil, fmt.Errorf("no matching version found")
+		return "", fmt.Errorf("no matching version found")
 	}
 
 	if vm.currentVersion.Equal(latestVersion) {
-		return nil, nil
+		return "", nil
 	}
 
-	prefixes := []string{">=", ">", "^", "~"}
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(vm.currentVersionStr, prefix) {
-			latestVersion, _ = semver.NewVersion(fmt.Sprintf("%s%s", prefix, latestVersion))
-			break
+	if flags.KeepRangeOperator {
+		prefixes := []string{">=", ">", "^", "~"}
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(vm.currentVersionStr, prefix) {
+				return fmt.Sprintf("%s%s", prefix, latestVersion), nil
+			}
 		}
 	}
 
-	return latestVersion, nil
+	return latestVersion.String(), nil
 }

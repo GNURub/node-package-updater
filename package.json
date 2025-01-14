@@ -7,7 +7,7 @@
   "devDependencies": {
     "@influxdata/influxdb-client": "1.35.0",
     "@nestjs-plugins/nestjs-nats-jetstream-transport": "2.2.6",
-    "@nestjs/common": "10.4.15",
+    "@nestjs/common": "~10.4.15",
     "@nestjs/config": "3.3.0",
     "@nestjs/core": "10.4.15",
     "@nestjs/event-emitter": "2.1.1",
