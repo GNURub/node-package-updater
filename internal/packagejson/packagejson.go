@@ -57,13 +57,14 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 		return nil, err
 	}
 
+	pkg.packageFilePath = fullPackageJSONPath
+
 	if err := json.Unmarshal(data, &pkg.packageJson); err != nil {
 		return nil, err
 	}
 
-	pkg.PackageManager = packagemanager.Detect(path.Base(fullPackageJSONPath), pkg.packageJson.Manager)
+	pkg.PackageManager = packagemanager.Detect(path.Base(pkg.packageFilePath), pkg.packageJson.Manager)
 
-	pkg.packageFilePath = fullPackageJSONPath
 	return pkg, nil
 }
 
@@ -122,7 +123,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	currentPackage := make(chan string, totalDeps)
 	processed := make(chan bool, totalDeps)
 	packageUpdateNotifier := make(chan bool)
-	done := make(chan bool)
+	done := make(chan struct{})
 	someNewVersion := false
 	bar, err := ui.ShowProgressBar(
 		totalDeps,
@@ -154,7 +155,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 					CurrentPackageIndex: currentProcessed,
 				})
 				if currentProcessed == totalDeps {
-					done <- true
+					done <- struct{}{}
 				}
 			case <-packageUpdateNotifier:
 				someNewVersion = true
