@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -90,36 +91,36 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	allDeps := make(map[string]dependency.Dependencies)
 	for name, version := range p.packageJson.Dependencies {
 		d, err := dependency.NewDependency(name, version, "prod")
-
-		if err == nil {
-			allDeps["prod"] = append(allDeps["prod"], d)
-		} else {
-			fmt.Print(err, "\n", name, "\n", version)
+		if err != nil {
+			fmt.Printf("Error creating dependency %s: %v\n", name, err)
+			continue
 		}
+		allDeps["prod"] = append(allDeps["prod"], d)
 	}
 
 	if !flags.Production {
 		for name, version := range p.packageJson.DevDependencies {
 			d, err := dependency.NewDependency(name, version, "dev")
-
-			if err == nil {
-				allDeps["dev"] = append(allDeps["dev"], d)
+			if err != nil {
+				fmt.Printf("Error creating dependency %s: %v\n", name, err)
+				continue
 			}
+			allDeps["dev"] = append(allDeps["dev"], d)
 		}
 
 		if flags.PeerDependencies {
 			for name, version := range p.packageJson.PeerDependencies {
 				d, err := dependency.NewDependency(name, version, "peer")
-
-				if err == nil {
-					allDeps["peer"] = append(allDeps["peer"], d)
+				if err != nil {
+					fmt.Printf("Error creating dependency %s: %v\n", name, err)
+					continue
 				}
+				allDeps["peer"] = append(allDeps["peer"], d)
 			}
 		}
 	}
 
 	totalDeps := len(allDeps["prod"]) + len(allDeps["dev"]) + len(allDeps["peer"])
-
 	if totalDeps == 0 {
 		return fmt.Errorf("no dependencies found")
 	}
@@ -127,15 +128,15 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	currentPackage := make(chan string, totalDeps)
 	processed := make(chan bool, totalDeps)
 	packageUpdateNotifier := make(chan bool)
-	done := make(chan struct{})
 	someNewVersion := false
-	bar, err := ui.ShowProgressBar(
-		totalDeps,
-	)
 
+	bar, err := ui.ShowProgressBar(totalDeps)
 	if err != nil {
 		return fmt.Errorf("error showing progress bar: %v", err)
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(totalDeps)
 
 	for _, envDeps := range allDeps {
 		go func(deps dependency.Dependencies) {
@@ -143,24 +144,18 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}(envDeps)
 	}
 
-	currentProcessed := 0
 	go func() {
+		currentProcessed := 0
 		for {
 			select {
 			case packageName := <-currentPackage:
 				bar.Send(ui.PackageName(packageName))
 			case <-processed:
+				wg.Done()
 				currentProcessed++
-
 				percentage := float64(currentProcessed) / float64(totalDeps)
+				bar.Send(ui.ProgressMsg{Percentage: percentage, CurrentPackageIndex: currentProcessed})
 
-				bar.Send(ui.ProgressMsg{
-					Percentage:          percentage,
-					CurrentPackageIndex: currentProcessed,
-				})
-				if currentProcessed == totalDeps {
-					done <- struct{}{}
-				}
 			case <-packageUpdateNotifier:
 				someNewVersion = true
 			}
@@ -169,7 +164,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	bar.Run()
 
-	<-done
+	wg.Wait()
 
 	bar.ReleaseTerminal()
 	bar.Kill()
@@ -189,14 +184,12 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
-	// Comprobamos si hay que actualizar las dependencias
 	if !updater.NeedToUpdate(toUpdate) {
 		fmt.Println("No dependencies to update")
 		return nil
 	}
 
 	err = p.updatePackageJSON(toUpdate)
-
 	if err != nil {
 		return fmt.Errorf("error updating package.json: %v", err)
 	}
