@@ -64,7 +64,7 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 		return nil, err
 	}
 
-	pkg.PackageManager = packagemanager.Detect(path.Base(pkg.packageFilePath), pkg.packageJson.Manager)
+	pkg.PackageManager = packagemanager.Detect(path.Dir(pkg.packageFilePath), pkg.packageJson.Manager)
 
 	return pkg, nil
 }
