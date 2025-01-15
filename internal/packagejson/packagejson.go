@@ -85,7 +85,12 @@ func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 }
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
-	cache, _ := cache.NewCache()
+	cache, err := cache.NewCache()
+
+	if err != nil {
+		return fmt.Errorf("error creating cache: %v", err)
+	}
+
 	defer cache.Close()
 
 	var allDeps dependency.Dependencies

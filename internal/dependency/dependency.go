@@ -119,8 +119,11 @@ func NewDependency(packageName, currentVersion, env string) (*Dependency, error)
 
 func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err error) {
 	var versions []string
-	if cached, err := cache.Get(d.PackageName); err == nil {
-		json.Unmarshal(cached, &versions)
+
+	if exists := cache.Has(d.PackageName); exists {
+		if cached, err := cache.Get(d.PackageName); err == nil {
+			json.Unmarshal(cached, &versions)
+		}
 	}
 
 	if len(versions) == 0 {

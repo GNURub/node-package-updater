@@ -38,6 +38,11 @@ func (cache *Cache) getKeyHash(url string) string {
 	return fmt.Sprintf("%v", keyHash.Sum64())
 }
 
+func (cache *Cache) Has(url string) bool {
+	key := cache.getKeyHash(url)
+	return cache.db.Has([]byte(key))
+}
+
 func (cache *Cache) Get(url string) (data []byte, err error) {
 	key := cache.getKeyHash(url)
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/charmbracelet/bubbles/table"
@@ -10,29 +11,139 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type model struct {
-	dependencies              dependency.Dependencies
-	selected                  map[int]struct{}
-	showVersionsForDependency *dependency.Dependency
-	quitting                  bool
-	done                      bool
-	dependencyTable           table.Model
-	versionsTable             table.Model
-}
-
 var (
 	baseStyle = lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("#63B0B8"))
 )
 
+type sessionState uint
+
+const (
+	depsView sessionState = iota
+	versionsView
+)
+
+type model struct {
+	state           sessionState
+	dependencies    dependency.Dependencies
+	selected        map[int]struct{}
+	quitting        bool
+	done            bool
+	dependencyTable table.Model
+	versionsTable   table.Model
+}
+
+type tickMsg struct{}
+
+func tick() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return tickMsg{}
+	})
+}
+
 func (m model) Init() tea.Cmd {
-	return nil
+	return tick()
+}
+
+func updateVersions(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "left", "h":
+			m.state = depsView
+			m.dependencyTable.Focus()
+			m.versionsTable.Blur()
+
+		case " ":
+			depCursor := m.dependencyTable.Cursor()
+			versionCursor := m.versionsTable.Cursor()
+			changed := m.dependencies[depCursor].NextVersion != m.dependencies[depCursor].Versions[versionCursor]
+			if changed {
+				m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions[versionCursor]
+				m.selected[depCursor] = struct{}{}
+			}
+			m.state = depsView
+			m.dependencyTable.Focus()
+			m.versionsTable.Blur()
+			m.dependencyTable, cmd = m.dependencyTable.Update(msg)
+			return m, cmd
+
+		}
+	}
+
+	m.versionsTable, cmd = m.versionsTable.Update(msg)
+
+	return m, cmd
+}
+
+func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+a":
+			for i := range m.dependencies {
+				m.selected[i] = struct{}{}
+			}
+		case "ctrl+u":
+			m.selected = make(map[int]struct{})
+
+		case "ctrl+d":
+			for i, dep := range m.dependencies {
+				if dep.Env == "dev" {
+					m.selected[i] = struct{}{}
+				}
+			}
+		case "ctrl+p":
+			for i, dep := range m.dependencies {
+				if dep.Env == "prod" {
+					m.selected[i] = struct{}{}
+				}
+			}
+
+		case "enter":
+			m.done = true
+			return m, tea.Sequence(
+				tea.ClearScreen,
+				tea.Quit,
+			)
+
+		case "right", "l":
+			cursor := m.dependencyTable.Cursor()
+			var rows []table.Row
+			for _, v := range m.dependencies[cursor].Versions {
+				rows = append(rows, table.Row{
+					m.dependencies[cursor].PackageName,
+					v,
+				})
+			}
+			m.versionsTable.SetRows(rows)
+
+			m.state = versionsView
+			m.versionsTable.Focus()
+			m.dependencyTable.Blur()
+
+		case " ":
+			cursor := m.dependencyTable.Cursor()
+			if _, ok := m.selected[cursor]; ok {
+				delete(m.selected, cursor)
+			} else {
+				m.selected[cursor] = struct{}{}
+			}
+			return m, tick()
+		}
+	}
+
+	m.dependencyTable, cmd = m.dependencyTable.Update(msg)
+
+	return m, cmd
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -42,150 +153,48 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.dependencyTable.Focus()
 			}
-		case "ctrl+a":
-			if m.dependencyTable.Focused() {
-				for i := range m.dependencies {
-					m.selected[i] = struct{}{}
-				}
-			}
-		case "ctrl+u":
-			if m.dependencyTable.Focused() {
-				for i := range m.dependencies {
-					delete(m.selected, i)
-				}
-			}
-		case "ctrl+d":
-			if m.dependencyTable.Focused() {
-				for i, dep := range m.dependencies {
-					if dep.Env == "dev" {
-						m.selected[i] = struct{}{}
-					}
-				}
-			}
-		case "ctrl+p":
-			if m.dependencyTable.Focused() {
-				for i, dep := range m.dependencies {
-					if dep.Env == "prod" {
-						m.selected[i] = struct{}{}
-					}
-				}
-			}
 		case "q", "ctrl+c":
 			m.quitting = true
-			m.selected = make(map[int]struct{})
 			return m, tea.Sequence(
 				tea.ClearScreen,
 				tea.Quit,
 			)
-		case "enter":
-			if m.showVersionsForDependency != nil {
-				return m, nil
-			}
-
-			m.done = true
-			return m, tea.Sequence(
-				tea.ClearScreen,
-				tea.Quit,
-			)
-		case "right", "l":
-			if m.dependencyTable.Focused() {
-				cursor := m.dependencyTable.Cursor()
-				m.showVersionsForDependency = m.dependencies[cursor]
-
-				// Actualizar las filas de la tabla de versiones
-				var rows []table.Row
-				for _, v := range m.showVersionsForDependency.Versions {
-					rows = append(rows, table.Row{m.showVersionsForDependency.PackageName, v})
-				}
-				m.versionsTable.SetRows(rows)
-
-				m.versionsTable.Focus()
-				m.dependencyTable.Blur()
-			}
-			return m, nil
-
-		case "left", "h":
-			if m.versionsTable.Focused() {
-				m.showVersionsForDependency = nil
-				m.dependencyTable.Focus()
-				m.versionsTable.Blur()
-			}
-			return m, nil
-
-		case " ":
-			if m.showVersionsForDependency != nil {
-				cursorDep := m.dependencyTable.Cursor()
-				cursor := m.versionsTable.Cursor()
-
-				m.dependencies[cursorDep].NextVersion = m.showVersionsForDependency.Versions[cursor]
-
-				m.showVersionsForDependency = nil
-				m.dependencyTable.Focus()
-				m.versionsTable.Blur()
-
-				return m, nil
-			}
-			if m.dependencyTable.Focused() {
-				cursor := m.dependencyTable.Cursor()
-				if _, ok := m.selected[cursor]; ok {
-					delete(m.selected, cursor)
-				} else {
-					m.selected[cursor] = struct{}{}
-				}
-			}
-			return m, nil
 		}
 	}
 
-	// Actualizar la tabla enfocada
-	if m.versionsTable.Focused() {
-		m.versionsTable, cmd = m.versionsTable.Update(msg)
-	} else {
-		m.dependencyTable, cmd = m.dependencyTable.Update(msg)
+	if m.state == versionsView {
+		return updateVersions(msg, m)
 	}
 
-	return m, cmd
+	return updateDeps(msg, m)
 }
 
 func (m model) View() string {
 	var s strings.Builder
 	if m.quitting || m.done {
-		s.WriteString("")
-		return s.String()
+		return ""
 	}
 
-	if m.showVersionsForDependency != nil {
+	if m.state == versionsView {
 		s.WriteString(baseStyle.Render(m.versionsTable.View()) + "\n\n")
-		s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render("←/h: back • ↑/↓: navigate • space: select\n"))
-		return s.String()
-	}
-
-	var rows []table.Row
-
-	for i, dep := range m.dependencies {
-		var selected string
-		if _, ok := m.selected[i]; ok {
-			selected = "✔"
-		} else {
-			selected = " "
+		s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render("\u2190/h: back \u2022 \u2191/\u2193: navigate \u2022 space: select\n"))
+	} else {
+		rows := m.dependencyTable.Rows()
+		for i := range rows {
+			if _, ok := m.selected[i]; ok {
+				rows[i][0] = "✓"
+			} else {
+				rows[i][0] = " "
+			}
+			rows[i][3] = m.dependencies[i].NextVersion
 		}
+		m.dependencyTable.SetRows(rows)
 
-		rows = append(rows, table.Row{
-			selected,
-			dep.PackageName,
-			dep.CurrentVersion,
-			dep.NextVersion,
-			dep.Env,
-		})
+		s.WriteString(baseStyle.Render(m.dependencyTable.View()) + "\n\n")
+		s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(
+			"\u2191/\u2193: navigate \u2022 space: select \u2022 enter: select \u2022 ctrl+a: select all \u2022 ctrl+p: select only prod \u2022 ctrl+d: select only dev \u2022 ctrl+u: unselect all \u2022 q: quit\n",
+		))
 	}
-
-	m.dependencyTable.SetRows(rows)
-
-	s.WriteString(baseStyle.Render(m.dependencyTable.View()) + "\n\n")
-
-	s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(
-		"↑/↓: navigate • space: select • enter: select • ctrl+a: select all • ctrl+p: select only prod • ctrl+d: select only dev • ctrl+u: unselect all • q: quit\n",
-	))
 
 	return s.String()
 }
@@ -204,8 +213,20 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		{Title: "Version", Width: 15},
 	}
 
+	var rows []table.Row
+	for _, dep := range deps {
+		rows = append(rows, table.Row{
+			" ",
+			dep.PackageName,
+			dep.CurrentVersion,
+			dep.NextVersion,
+			dep.Env,
+		})
+	}
+
 	dependencyTable := table.New(
 		table.WithColumns(dependencyTableColumns),
+		table.WithRows(rows),
 		table.WithFocused(true),
 		table.WithHeight(7),
 	)
@@ -230,6 +251,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 	versionsTable.SetStyles(defaultTableStyles)
 
 	initialModel := model{
+		state:           depsView,
 		dependencies:    deps,
 		selected:        make(map[int]struct{}),
 		dependencyTable: dependencyTable,
