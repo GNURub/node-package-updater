@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -41,6 +42,11 @@ type Versions struct {
 
 func NewVersions(versions []*Version) *Versions {
 	orderedMap := orderedmap.New()
+
+	sort.Slice(versions, func(i, j int) bool {
+		return versions[i].GreaterThan(versions[j].Version)
+	})
+
 	for _, version := range versions {
 		orderedMap.Set(version.Original(), version)
 	}
