@@ -174,11 +174,12 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err 
 	var vs []*Version
 	versions := NewVersions(vs)
 
-	if exists := cache.Has(d.PackageName); exists {
-		if cached, err := cache.Get(d.PackageName); err == nil {
-			json.Unmarshal(cached, versions)
-		}
-	}
+	// TODO: fix cache
+	// if exists := cache.Has(d.PackageName); exists {
+	// 	if cached, err := cache.Get(d.PackageName); err == nil {
+	// 		json.Unmarshal(cached, versions)
+	// 	}
+	// }
 
 	if versions.Len() == 0 {
 		versions, err = getVersionsFromRegistry(flags.Registry, d.PackageName)
