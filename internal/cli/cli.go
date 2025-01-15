@@ -55,12 +55,12 @@ func ParseFlags() *Flags {
 	flag.StringVar(&flags.ConfigFile, "config", "", "Path to config file (default: .npmrc)")
 
 	// Opciones de actualización
-	flag.BoolVar(&flags.UpdateAll, "u", false, "Update all dependencies to latest versions")
+	flag.BoolVar(&flags.UpdateAll, "u", true, "Update all dependencies to latest versions")
 	flag.BoolVar(&flags.Major, "major", false, "Update to latest major versions")
 	flag.BoolVar(&flags.Minor, "minor", false, "Update to latest minor versions")
 	flag.BoolVar(&flags.Patch, "patch", false, "Update to latest patch versions")
-	flag.BoolVar(&flags.MaintainSemver, "m", true, "Maintain semver satisfaction")
-	flag.BoolVar(&flags.KeepRangeOperator, "k", true, "Keep range operator")
+	flag.BoolVar(&flags.MaintainSemver, "m", false, "Maintain semver satisfaction")
+	flag.BoolVar(&flags.KeepRangeOperator, "k", true, "Keep range operator on version")
 
 	// Tipos de dependencias
 	flag.BoolVar(&flags.Production, "prod", false, "Update only production dependencies")
