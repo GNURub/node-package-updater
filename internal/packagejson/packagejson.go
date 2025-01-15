@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/dependency"
@@ -216,6 +215,8 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 	}
 
 	orderedJSON := orderedmap.New()
+	orderedJSON.SetEscapeHTML(false)
+
 	if err := json.Unmarshal(originalData, &orderedJSON); err != nil {
 		return fmt.Errorf("error unmarshalling package.json: %v", err)
 	}
@@ -250,20 +251,8 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 		return fmt.Errorf("error serializing updated package.json: %v", err)
 	}
 
-	// Opcional: realizar reemplazos adicionales si es necesario
-	output := buf.String()
-	output = strings.ReplaceAll(output, `\u003e`, `>`)
-	output = strings.ReplaceAll(output, `\u003c`, `<`)
-	output = strings.ReplaceAll(output, `\u0026`, `&`)
-	output = strings.ReplaceAll(output, `\u0022`, `"`)
-	output = strings.ReplaceAll(output, `\u0027`, `'`)
-	output = strings.ReplaceAll(output, `\u002f`, `/`)
-	output = strings.ReplaceAll(output, `\u005c`, `\`)
-	output = strings.ReplaceAll(output, `\u002f`, `/`)
-	output = strings.ReplaceAll(output, `\u0000`, ``)
-
 	// Escribir el archivo actualizado
-	if err := os.WriteFile(p.packageFilePath, []byte(output), 0644); err != nil {
+	if err := os.WriteFile(p.packageFilePath, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("error writing updated package.json: %v", err)
 	}
 
