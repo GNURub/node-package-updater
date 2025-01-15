@@ -43,6 +43,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i := 0; i < len(m.table.Rows()); i++ {
 				m.selected[i] = struct{}{}
 			}
+		case "ctrl+u":
+			m.selected = make(map[int]struct{})
+		case "ctrl+d":
+			for i := 0; i < len(m.table.Rows()); i++ {
+				if ok := m.dependencies[i].Env == "dev"; ok {
+					m.selected[i] = struct{}{}
+				}
+			}
+		case "ctrl+p":
+			for i := 0; i < len(m.table.Rows()); i++ {
+				if ok := m.dependencies[i].Env == "prod"; ok {
+					m.selected[i] = struct{}{}
+				}
+			}
 		case "q", "ctrl+c":
 			m.quitting = true
 
@@ -66,6 +80,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.selected[cursor] = struct{}{}
 			}
+			return m, nil
 		}
 	}
 
@@ -85,7 +100,7 @@ func (m model) View() string {
 		if _, ok := m.selected[i]; ok {
 			rows[i][0] = "✔"
 		} else {
-			rows[i][0] = ""
+			rows[i][0] = " "
 		}
 	}
 
@@ -94,7 +109,7 @@ func (m model) View() string {
 	s.WriteString(baseStyle.Render(m.table.View()) + "\n\n")
 
 	s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(
-		"↑/↓: navigate • space: select • enter: confirm • q: quit\n",
+		"↑/↓: navigate • space: select • enter: select • ctrl+a: select all • ctrl+p: select only prod • ctrl+d: select only dev • ctrl+u: unselect all • q: quit\n",
 	))
 
 	return s.String()
@@ -124,7 +139,7 @@ func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dep
 	var rows []table.Row
 	for _, dep := range dependencies {
 		rows = append(rows, table.Row{
-			"",
+			" ",
 			dep.PackageName,
 			dep.CurrentVersion,
 			dep.NextVersion,

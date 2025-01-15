@@ -55,12 +55,8 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (string, error) {
 	var latestVersion *semver.Version
 
 	for _, v := range vm.versions {
-		if vm.latest || vm.currentReq == nil {
-			latestVersion = v
-			break
-		}
-
-		if vm.currentReq.Check(v) && (latestVersion == nil || v.GreaterThan(latestVersion)) {
+		if (vm.latest || vm.currentReq == nil || vm.currentReq.Check(v)) &&
+			(latestVersion == nil || v.GreaterThan(latestVersion)) {
 			latestVersion = v
 		}
 	}

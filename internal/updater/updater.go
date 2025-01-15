@@ -23,7 +23,6 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		go func() {
 			defer wg.Done()
 			for dep := range jobs {
-				// Enviar el paquete actual
 				currentPackage <- dep.PackageName
 
 				newVersion, err := dep.GetNewVersion(flags, cache)

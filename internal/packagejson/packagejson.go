@@ -249,8 +249,10 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 		return fmt.Errorf("error serializing updated package.json: %v", err)
 	}
 
+	jsonBytes := bytes.TrimRight(buf.Bytes(), "\n")
+
 	// Escribir el archivo actualizado
-	if err := os.WriteFile(p.packageFilePath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(p.packageFilePath, jsonBytes, 0644); err != nil {
 		return fmt.Errorf("error writing updated package.json: %v", err)
 	}
 
