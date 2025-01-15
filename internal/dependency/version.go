@@ -23,14 +23,14 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 	currentVersion, _ := semver.NewVersion(currentOnlyVersion)
 
 	var currentReq *semver.Constraints
-	if flags.Major {
-		currentReq, _ = semver.NewConstraint(fmt.Sprintf(">=%s", currentOnlyVersion))
+	if flags.MaintainSemver {
+		currentReq, _ = semver.NewConstraint(current)
 	} else if flags.Minor {
 		currentReq, _ = semver.NewConstraint(fmt.Sprintf("^%s", currentOnlyVersion))
 	} else if flags.Patch {
 		currentReq, _ = semver.NewConstraint(fmt.Sprintf("~%s", currentOnlyVersion))
 	} else {
-		currentReq, _ = semver.NewConstraint(current)
+		currentReq, _ = semver.NewConstraint(fmt.Sprintf(">=%s", currentOnlyVersion))
 	}
 
 	var parsedVersions []*semver.Version

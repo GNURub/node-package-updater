@@ -9,8 +9,6 @@ import (
 
 type Flags struct {
 	BaseDir           string
-	UpdateAll         bool
-	Major             bool
 	Minor             bool
 	Patch             bool
 	Workspaces        bool
@@ -55,8 +53,6 @@ func ParseFlags() *Flags {
 	flag.StringVar(&flags.ConfigFile, "config", "", "Path to config file (default: .npmrc)")
 
 	// Opciones de actualización
-	flag.BoolVar(&flags.UpdateAll, "u", true, "Update all dependencies to latest versions")
-	flag.BoolVar(&flags.Major, "major", false, "Update to latest major versions")
 	flag.BoolVar(&flags.Minor, "minor", false, "Update to latest minor versions")
 	flag.BoolVar(&flags.Patch, "patch", false, "Update to latest patch versions")
 	flag.BoolVar(&flags.MaintainSemver, "m", false, "Maintain semver satisfaction")
@@ -155,11 +151,11 @@ func (f *Flags) ValidateFlags() error {
 
 func (f *Flags) String() string {
 	return fmt.Sprintf(
-		"BaseDir: %s\nRegistry: %s\nUpdateAll: %v\nMajor: %v\nMinor: %v\nPatch: %v\n"+
+		"BaseDir: %s\nRegistry: %s\nMinor: %v\nPatch: %v\n"+
 			"Production: %v\n"+
 			"DryRun: %v\nVerbose: %v\nLogLevel: %s\nOutputFormat: %s\n"+
 			"Include: %v\nExclude: %v\nTimeout: %d",
-		f.BaseDir, f.Registry, f.UpdateAll, f.Major, f.Minor, f.Patch,
+		f.BaseDir, f.Registry, f.Minor, f.Patch,
 		f.Production,
 		f.DryRun, f.Verbose, f.LogLevel, f.OutputFormat,
 		f.Include, f.Exclude, f.Timeout,
