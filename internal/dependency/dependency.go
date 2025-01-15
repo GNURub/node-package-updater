@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
 )
 
@@ -96,10 +97,24 @@ func NewDependency(packageName, currentVersion, env string) (*Dependency, error)
 	}, nil
 }
 
-func (d *Dependency) GetNewVersion(flags *cli.Flags) (string, error) {
-	versions, err := getVersionsFromRegistry(flags.Registry, d.PackageName)
-	if err != nil {
-		return "", fmt.Errorf("error fetching versions from npm registry: %w", err)
+func (d *Dependency) GetNewVersion(flags *cli.Flags, cache *cache.Cache) (newVersion string, err error) {
+	var versions []string
+	if cached, err := cache.Get(d.PackageName); err == nil {
+		json.Unmarshal(cached, &versions)
+	}
+
+	if len(versions) == 0 {
+		versions, err = getVersionsFromRegistry(flags.Registry, d.PackageName)
+		if err != nil {
+			return "", fmt.Errorf("error fetching versions from npm registry: %w", err)
+		}
+
+		data, err := json.Marshal(versions)
+		if err != nil {
+			return "", fmt.Errorf("error marshalling versions: %w", err)
+		}
+
+		cache.Set(d.PackageName, data)
 	}
 
 	vm, err := NewVersionManager(d.CurrentVersion, versions, flags)
@@ -107,7 +122,7 @@ func (d *Dependency) GetNewVersion(flags *cli.Flags) (string, error) {
 		return "", fmt.Errorf("error creating version manager: %w", err)
 	}
 
-	newVersion, err := vm.GetUpdatedVersion(flags)
+	newVersion, err = vm.GetUpdatedVersion(flags)
 	if err != nil {
 		return "", fmt.Errorf("error getting updated version: %w", err)
 	}

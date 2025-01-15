@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
@@ -83,6 +84,9 @@ func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 }
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
+	cache, _ := cache.NewCache()
+	defer cache.Close()
+
 	allDeps := make(map[string]dependency.Dependencies)
 	for name, version := range p.packageJson.Dependencies {
 		d, err := dependency.NewDependency(name, version, "prod")
@@ -135,7 +139,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	for _, envDeps := range allDeps {
 		go func(deps dependency.Dependencies) {
-			updater.FetchNewVersions(deps, flags, processed, currentPackage, packageUpdateNotifier)
+			updater.FetchNewVersions(deps, flags, processed, currentPackage, packageUpdateNotifier, cache)
 		}(envDeps)
 	}
 
