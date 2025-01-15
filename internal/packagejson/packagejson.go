@@ -23,7 +23,7 @@ type PackageJSON struct {
 	packageFilePath string
 	basedir         string
 	PackageManager  *packagemanager.PackageManager
-	JSON            struct {
+	packageJson     struct {
 		Manager          string            `json:"packageManager,omitempty"`
 		Dependencies     map[string]string `json:"dependencies,omitempty"`
 		DevDependencies  map[string]string `json:"devDependencies,omitempty"`
@@ -34,7 +34,7 @@ type PackageJSON struct {
 
 func WithPackageManager(manager string) Option {
 	return func(s *PackageJSON) {
-		s.JSON.Manager = manager
+		s.packageJson.Manager = manager
 	}
 }
 
@@ -57,11 +57,11 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(data, &pkg.JSON); err != nil {
+	if err := json.Unmarshal(data, &pkg.packageJson); err != nil {
 		return nil, err
 	}
 
-	pkg.PackageManager = packagemanager.Detect(path.Base(fullPackageJSONPath), pkg.JSON.Manager)
+	pkg.PackageManager = packagemanager.Detect(path.Base(fullPackageJSONPath), pkg.packageJson.Manager)
 
 	pkg.packageFilePath = fullPackageJSONPath
 	return pkg, nil
@@ -69,7 +69,7 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 
 func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 	var workspacePaths []string
-	for _, workspace := range p.JSON.Workspaces {
+	for _, workspace := range p.packageJson.Workspaces {
 		matches, err := filepath.Glob(workspace)
 		if err != nil {
 			return nil, err
@@ -83,7 +83,7 @@ func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	allDeps := make(map[string]dependency.Dependencies)
-	for name, version := range p.JSON.Dependencies {
+	for name, version := range p.packageJson.Dependencies {
 		d, err := dependency.NewDependency(name, version, "prod")
 
 		if err == nil {
@@ -94,7 +94,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	if !flags.Production {
-		for name, version := range p.JSON.DevDependencies {
+		for name, version := range p.packageJson.DevDependencies {
 			d, err := dependency.NewDependency(name, version, "dev")
 
 			if err == nil {
@@ -103,7 +103,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 
 		if flags.PeerDependencies {
-			for name, version := range p.JSON.PeerDependencies {
+			for name, version := range p.packageJson.PeerDependencies {
 				d, err := dependency.NewDependency(name, version, "peer")
 
 				if err == nil {
