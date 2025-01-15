@@ -10,29 +10,37 @@ import (
 )
 
 type PackageManager struct {
-	Name     string
-	LockFile string
+	Name      string
+	LockFiles []string
 }
 
 var (
 	Bun = &PackageManager{
-		Name:     "bun",
-		LockFile: "bun.lockb",
+		Name: "bun",
+		LockFiles: []string{
+			"bun.lockb",
+			"bun.lock",
+		},
 	}
 
 	Yarn = &PackageManager{
-		Name:     "yarn",
-		LockFile: "yarn.lock",
+		Name:      "yarn",
+		LockFiles: []string{"yarn.lock"},
 	}
 
 	Pnpm = &PackageManager{
-		Name:     "pnpm",
-		LockFile: "pnpm-lock.yaml",
+		Name:      "pnpm",
+		LockFiles: []string{"pnpm-lock.yaml"},
+	}
+
+	Deno = &PackageManager{
+		Name:      "deno",
+		LockFiles: []string{"deno.jsonc", "deno.json"},
 	}
 
 	Npm = &PackageManager{
-		Name:     "npm",
-		LockFile: "package-lock.json",
+		Name:      "npm",
+		LockFiles: []string{"package-lock.json"},
 	}
 )
 
@@ -46,11 +54,14 @@ func Detect(projectPath, manager string) *PackageManager {
 			}
 		}
 	}
-
 	for _, pm := range supportedPackageManagers {
-		lockPath := filepath.Join(projectPath, pm.LockFile)
-		if _, err := os.Stat(lockPath); err == nil {
-			if _, err := exec.LookPath(pm.Name); err == nil {
+		_, cmdExists := exec.LookPath(pm.Name)
+		if cmdExists != nil {
+			continue
+		}
+
+		for _, lockFile := range pm.LockFiles {
+			if _, err := os.Stat(filepath.Join(projectPath, lockFile)); err == nil {
 				return pm
 			}
 		}

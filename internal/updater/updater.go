@@ -9,15 +9,21 @@ import (
 )
 
 func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed chan bool, currentPackage chan string, updateNotification chan bool, cache *cache.Cache) {
-	numWorkers := 8
+	numWorkers := 10
+	if len(deps) < numWorkers {
+		numWorkers = len(deps)
+	}
+
 	jobs := make(chan *dependency.Dependency, len(deps))
 	var wg sync.WaitGroup
 
-	wg.Add(numWorkers)
 	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			for dep := range jobs {
+				// Enviar el paquete actual
 				currentPackage <- dep.PackageName
 
 				newVersion, err := dep.GetNewVersion(flags, cache)
@@ -32,10 +38,12 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		}()
 	}
 
-	for _, dep := range deps {
-		jobs <- dep
-	}
-	close(jobs)
+	go func() {
+		defer close(jobs)
+		for _, dep := range deps {
+			jobs <- dep
+		}
+	}()
 
 	wg.Wait()
 }

@@ -3,7 +3,6 @@ package dependency
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
+	"github.com/valyala/fasthttp"
 )
 
 type NpmRegistryResponse struct {
@@ -145,11 +145,10 @@ func getVersionsFromRegistry(registry, packageName string) ([]string, error) {
 
 	url := fmt.Sprintf("%s/%s", registryURL, packageName)
 
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.SetRequestURI(url)
+	req.Header.SetMethod("GET")
 	req.Header.Set("Accept", "application/vnd.npm.install-v1+json")
 	req.Header.Set("User-Agent", "node-package-updater")
 
@@ -157,22 +156,19 @@ func getVersionsFromRegistry(registry, packageName string) ([]string, error) {
 		req.Header.Set("Authorization", "Bearer "+npmConfig.AuthToken)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(resp)
+
+	err = fasthttp.Do(req, resp)
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("npm registry returned status %d: %s", resp.StatusCode, string(body))
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return nil, fmt.Errorf("npm registry returned status %d: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
-	}
-
+	body := resp.Body()
 	var npmResp NpmRegistryResponse
 	if err := json.Unmarshal(body, &npmResp); err != nil {
 		return nil, fmt.Errorf("error parsing JSON response: %w", err)
