@@ -56,7 +56,7 @@ func (cache *Cache) Get(url string) (data []byte, err error) {
 
 func (cache *Cache) Set(url string, data []byte) error {
 	key := cache.getKeyHash(url)
-	return cache.db.PutWithTTL([]byte(key), data, 30*time.Second)
+	return cache.db.PutWithTTL([]byte(key), data, time.Minute)
 }
 
 func ensureDir(dirName string) error {

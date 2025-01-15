@@ -3,14 +3,15 @@ package dependency
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
+	"github.com/Masterminds/semver/v3"
 	"github.com/valyala/fasthttp"
 )
 
@@ -25,6 +26,8 @@ type NpmrcConfig struct {
 }
 
 type Dependency struct {
+	*sync.Mutex
+	Versions       []string
 	PackageName    string
 	CurrentVersion string
 	NextVersion    string
@@ -34,9 +37,26 @@ type Dependency struct {
 
 type Dependencies []*Dependency
 
-// httpClient es un cliente HTTP reutilizable con timeout
-var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
+func (d Dependencies) FilterWithNewVersion() Dependencies {
+	var filtered Dependencies
+	for _, dep := range d {
+		if dep.NextVersion != "" {
+			filtered = append(filtered, dep)
+		}
+	}
+
+	return filtered
+}
+
+func (d Dependencies) FilterForUpdate() Dependencies {
+	var filtered Dependencies
+	for _, dep := range d {
+		if dep.HaveToUpdate {
+			filtered = append(filtered, dep)
+		}
+	}
+
+	return filtered
 }
 
 // parseNpmrc lee y parsea el archivo .npmrc
@@ -97,7 +117,7 @@ func NewDependency(packageName, currentVersion, env string) (*Dependency, error)
 	}, nil
 }
 
-func (d *Dependency) GetNewVersion(flags *cli.Flags, cache *cache.Cache) (newVersion string, err error) {
+func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err error) {
 	var versions []string
 	if cached, err := cache.Get(d.PackageName); err == nil {
 		json.Unmarshal(cached, &versions)
@@ -106,28 +126,49 @@ func (d *Dependency) GetNewVersion(flags *cli.Flags, cache *cache.Cache) (newVer
 	if len(versions) == 0 {
 		versions, err = getVersionsFromRegistry(flags.Registry, d.PackageName)
 		if err != nil {
-			return "", fmt.Errorf("error fetching versions from npm registry: %w", err)
+			return fmt.Errorf("error fetching versions from npm registry: %w", err)
 		}
+
+		// Ordenamos las versiones de mayor a menor
+		sort.SliceStable(versions, func(i, j int) bool {
+			vi, err := semver.NewVersion(versions[i])
+			if err != nil {
+				return false
+			}
+			vj, err := semver.NewVersion(versions[j])
+			if err != nil {
+				return false
+			}
+			return vi.GreaterThan(vj)
+		})
 
 		data, err := json.Marshal(versions)
 		if err != nil {
-			return "", fmt.Errorf("error marshalling versions: %w", err)
+			return fmt.Errorf("error marshalling versions: %w", err)
 		}
 
 		cache.Set(d.PackageName, data)
 	}
 
+	d.Versions = versions
+
 	vm, err := NewVersionManager(d.CurrentVersion, versions, flags)
 	if err != nil {
-		return "", fmt.Errorf("error creating version manager: %w", err)
+		return fmt.Errorf("error creating version manager: %w", err)
 	}
 
-	newVersion, err = vm.GetUpdatedVersion(flags)
+	newVersion, err := vm.GetUpdatedVersion(flags)
 	if err != nil {
-		return "", fmt.Errorf("error getting updated version: %w", err)
+		return fmt.Errorf("error getting updated version: %w", err)
 	}
 
-	return newVersion, nil
+	if newVersion == "" {
+		return fmt.Errorf("no new version found")
+	}
+
+	d.NextVersion = newVersion
+
+	return nil
 }
 
 func getVersionsFromRegistry(registry, packageName string) ([]string, error) {

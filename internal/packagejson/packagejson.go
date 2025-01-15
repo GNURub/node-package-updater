@@ -88,14 +88,15 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	cache, _ := cache.NewCache()
 	defer cache.Close()
 
-	allDeps := make(map[string]dependency.Dependencies)
+	var allDeps dependency.Dependencies
+
 	for name, version := range p.packageJson.Dependencies {
 		d, err := dependency.NewDependency(name, version, "prod")
 		if err != nil {
 			fmt.Printf("Error creating dependency %s: %v\n", name, err)
 			continue
 		}
-		allDeps["prod"] = append(allDeps["prod"], d)
+		allDeps = append(allDeps, d)
 	}
 
 	if !flags.Production {
@@ -105,7 +106,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 				fmt.Printf("Error creating dependency %s: %v\n", name, err)
 				continue
 			}
-			allDeps["dev"] = append(allDeps["dev"], d)
+			allDeps = append(allDeps, d)
 		}
 
 		if flags.PeerDependencies {
@@ -115,20 +116,19 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 					fmt.Printf("Error creating dependency %s: %v\n", name, err)
 					continue
 				}
-				allDeps["peer"] = append(allDeps["peer"], d)
+				allDeps = append(allDeps, d)
 			}
 		}
 	}
 
-	totalDeps := len(allDeps["prod"]) + len(allDeps["dev"]) + len(allDeps["peer"])
+	totalDeps := len(allDeps)
+
 	if totalDeps == 0 {
 		return fmt.Errorf("no dependencies found")
 	}
 
 	currentPackage := make(chan string, totalDeps)
 	processed := make(chan bool, totalDeps)
-	packageUpdateNotifier := make(chan bool)
-	someNewVersion := false
 
 	bar, err := ui.ShowProgressBar(totalDeps)
 	if err != nil {
@@ -138,11 +138,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	var wg sync.WaitGroup
 	wg.Add(totalDeps)
 
-	for _, envDeps := range allDeps {
-		go func(deps dependency.Dependencies) {
-			updater.FetchNewVersions(deps, flags, processed, currentPackage, packageUpdateNotifier, cache)
-		}(envDeps)
-	}
+	go func() {
+		updater.FetchNewVersions(allDeps, flags, processed, currentPackage, cache)
+	}()
 
 	go func() {
 		currentProcessed := 0
@@ -155,9 +153,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 				currentProcessed++
 				percentage := float64(currentProcessed) / float64(totalDeps)
 				bar.Send(ui.ProgressMsg{Percentage: percentage, CurrentPackageIndex: currentProcessed})
-
-			case <-packageUpdateNotifier:
-				someNewVersion = true
 			}
 		}
 	}()
@@ -169,27 +164,28 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	bar.ReleaseTerminal()
 	bar.Kill()
 
-	if !someNewVersion {
+	depsWithNewVersion := allDeps.FilterWithNewVersion()
+
+	if len(depsWithNewVersion) == 0 {
 		return nil
 	}
 
-	toUpdate := allDeps
 	if !flags.NoInteractive {
-		toUpdate, _ = ui.SelectDependencies(allDeps)
+		depsWithNewVersion, _ = ui.SelectDependencies(depsWithNewVersion)
 	} else {
-		for _, envDeps := range allDeps {
-			for _, dep := range envDeps {
-				dep.HaveToUpdate = dep.NextVersion != ""
-			}
+		for _, dep := range depsWithNewVersion {
+			dep.HaveToUpdate = true
 		}
 	}
 
-	if !updater.NeedToUpdate(toUpdate) {
+	depsToUpdate := depsWithNewVersion.FilterForUpdate()
+
+	if len(depsToUpdate) == 0 {
 		fmt.Println("No dependencies to update")
 		return nil
 	}
 
-	err = p.updatePackageJSON(toUpdate)
+	err = p.updatePackageJSON(depsToUpdate)
 	if err != nil {
 		return fmt.Errorf("error updating package.json: %v", err)
 	}
@@ -205,7 +201,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	return nil
 }
 
-func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Dependencies) error {
+func (p *PackageJSON) updatePackageJSON(updatedDeps dependency.Dependencies) error {
 	// Leer el archivo original
 	originalData, err := os.ReadFile(p.packageFilePath)
 	if err != nil {
@@ -225,15 +221,10 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps map[string]dependency.Depend
 		"peer": "peerDependencies",
 	}
 
-	for envType, section := range depSections {
-		if depsValue, ok := orderedJSON.Get(section); ok {
+	for _, dep := range updatedDeps {
+		if depsValue, ok := orderedJSON.Get(depSections[dep.Env]); ok {
 			if depsMap, ok := depsValue.(orderedmap.OrderedMap); ok {
-				// Luego actualizar las que han cambiado
-				for _, dep := range updatedDeps[envType] {
-					if dep.HaveToUpdate {
-						depsMap.Set(dep.PackageName, dep.NextVersion)
-					}
-				}
+				depsMap.Set(dep.PackageName, dep.NextVersion)
 			}
 		}
 	}

@@ -11,11 +11,13 @@ import (
 )
 
 type model struct {
-	dependencies dependency.Dependencies
-	selected     map[int]struct{}
-	quitting     bool
-	done         bool
-	table        table.Model
+	dependencies              dependency.Dependencies
+	selected                  map[int]struct{}
+	showVersionsForDependency *dependency.Dependency
+	quitting                  bool
+	done                      bool
+	dependencyTable           table.Model
+	versionsTable             table.Model
 }
 
 var (
@@ -30,61 +32,118 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
+			if m.dependencyTable.Focused() {
+				m.dependencyTable.Blur()
 			} else {
-				m.table.Focus()
+				m.dependencyTable.Focus()
 			}
 		case "ctrl+a":
-			for i := 0; i < len(m.table.Rows()); i++ {
-				m.selected[i] = struct{}{}
-			}
-		case "ctrl+u":
-			m.selected = make(map[int]struct{})
-		case "ctrl+d":
-			for i := 0; i < len(m.table.Rows()); i++ {
-				if ok := m.dependencies[i].Env == "dev"; ok {
+			if m.dependencyTable.Focused() {
+				for i := range m.dependencies {
 					m.selected[i] = struct{}{}
 				}
 			}
+		case "ctrl+u":
+			if m.dependencyTable.Focused() {
+				for i := range m.dependencies {
+					delete(m.selected, i)
+				}
+			}
+		case "ctrl+d":
+			if m.dependencyTable.Focused() {
+				for i, dep := range m.dependencies {
+					if dep.Env == "dev" {
+						m.selected[i] = struct{}{}
+					}
+				}
+			}
 		case "ctrl+p":
-			for i := 0; i < len(m.table.Rows()); i++ {
-				if ok := m.dependencies[i].Env == "prod"; ok {
-					m.selected[i] = struct{}{}
+			if m.dependencyTable.Focused() {
+				for i, dep := range m.dependencies {
+					if dep.Env == "prod" {
+						m.selected[i] = struct{}{}
+					}
 				}
 			}
 		case "q", "ctrl+c":
 			m.quitting = true
-
 			m.selected = make(map[int]struct{})
-
 			return m, tea.Sequence(
 				tea.ClearScreen,
 				tea.Quit,
 			)
 		case "enter":
+			if m.showVersionsForDependency != nil {
+				return m, nil
+			}
+
 			m.done = true
 			return m, tea.Sequence(
 				tea.ClearScreen,
 				tea.Quit,
 			)
+		case "right", "l":
+			if m.dependencyTable.Focused() {
+				cursor := m.dependencyTable.Cursor()
+				m.showVersionsForDependency = m.dependencies[cursor]
+
+				// Actualizar las filas de la tabla de versiones
+				var rows []table.Row
+				for _, v := range m.showVersionsForDependency.Versions {
+					rows = append(rows, table.Row{m.showVersionsForDependency.PackageName, v})
+				}
+				m.versionsTable.SetRows(rows)
+
+				m.versionsTable.Focus()
+				m.dependencyTable.Blur()
+			}
+			return m, nil
+
+		case "left", "h":
+			if m.versionsTable.Focused() {
+				m.showVersionsForDependency = nil
+				m.dependencyTable.Focus()
+				m.versionsTable.Blur()
+			}
+			return m, nil
+
 		case " ":
-			cursor := m.table.Cursor()
-			_, ok := m.selected[cursor]
-			if ok {
-				delete(m.selected, cursor)
-			} else {
-				m.selected[cursor] = struct{}{}
+			if m.showVersionsForDependency != nil {
+				cursorDep := m.dependencyTable.Cursor()
+				cursor := m.versionsTable.Cursor()
+
+				m.dependencies[cursorDep].NextVersion = m.showVersionsForDependency.Versions[cursor]
+
+				m.showVersionsForDependency = nil
+				m.dependencyTable.Focus()
+				m.versionsTable.Blur()
+
+				return m, nil
+			}
+			if m.dependencyTable.Focused() {
+				cursor := m.dependencyTable.Cursor()
+				if _, ok := m.selected[cursor]; ok {
+					delete(m.selected, cursor)
+				} else {
+					m.selected[cursor] = struct{}{}
+				}
 			}
 			return m, nil
 		}
 	}
 
-	m.table, cmd = m.table.Update(msg)
+	// Actualizar la tabla enfocada
+	if m.versionsTable.Focused() {
+		m.versionsTable, cmd = m.versionsTable.Update(msg)
+	} else {
+		m.dependencyTable, cmd = m.dependencyTable.Update(msg)
+	}
+
 	return m, cmd
 }
 
@@ -95,18 +154,34 @@ func (m model) View() string {
 		return s.String()
 	}
 
-	rows := m.table.Rows()
-	for i := range rows {
-		if _, ok := m.selected[i]; ok {
-			rows[i][0] = "✔"
-		} else {
-			rows[i][0] = " "
-		}
+	if m.showVersionsForDependency != nil {
+		s.WriteString(baseStyle.Render(m.versionsTable.View()) + "\n\n")
+		s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render("←/h: back • ↑/↓: navigate • space: select\n"))
+		return s.String()
 	}
 
-	m.table.SetRows(rows)
+	var rows []table.Row
 
-	s.WriteString(baseStyle.Render(m.table.View()) + "\n\n")
+	for i, dep := range m.dependencies {
+		var selected string
+		if _, ok := m.selected[i]; ok {
+			selected = "✔"
+		} else {
+			selected = " "
+		}
+
+		rows = append(rows, table.Row{
+			selected,
+			dep.PackageName,
+			dep.CurrentVersion,
+			dep.NextVersion,
+			dep.Env,
+		})
+	}
+
+	m.dependencyTable.SetRows(rows)
+
+	s.WriteString(baseStyle.Render(m.dependencyTable.View()) + "\n\n")
 
 	s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(
 		"↑/↓: navigate • space: select • enter: select • ctrl+a: select all • ctrl+p: select only prod • ctrl+d: select only dev • ctrl+u: unselect all • q: quit\n",
@@ -115,20 +190,8 @@ func (m model) View() string {
 	return s.String()
 }
 
-func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dependency.Dependencies, error) {
-	var dependencies dependency.Dependencies
-
-	for _, envDeps := range deps {
-		for _, dep := range envDeps {
-			if dep.NextVersion != "" {
-				depCopy := dep
-				depCopy.HaveToUpdate = false
-				dependencies = append(dependencies, depCopy)
-			}
-		}
-	}
-
-	columns := []table.Column{
+func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, error) {
+	dependencyTableColumns := []table.Column{
 		{Title: "", Width: 2},
 		{Title: "Dependency", Width: 30},
 		{Title: "Current Version", Width: 15},
@@ -136,40 +199,41 @@ func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dep
 		{Title: "Type", Width: 15},
 	}
 
-	var rows []table.Row
-	for _, dep := range dependencies {
-		rows = append(rows, table.Row{
-			" ",
-			dep.PackageName,
-			dep.CurrentVersion,
-			dep.NextVersion,
-			dep.Env,
-		})
+	versionsTableColumns := []table.Column{
+		{Title: "Dependency", Width: 15},
+		{Title: "Version", Width: 15},
 	}
 
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
+	dependencyTable := table.New(
+		table.WithColumns(dependencyTableColumns),
 		table.WithFocused(true),
 		table.WithHeight(7),
 	)
 
-	s := table.DefaultStyles()
-	s.Header = s.Header.
+	versionsTable := table.New(
+		table.WithColumns(versionsTableColumns),
+		table.WithFocused(false),
+		table.WithHeight(7),
+	)
+
+	defaultTableStyles := table.DefaultStyles()
+	defaultTableStyles.Header = defaultTableStyles.Header.
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("#63B0B8")).
 		BorderBottom(true).
 		Bold(true)
-	s.Selected = s.Selected.
+	defaultTableStyles.Selected = defaultTableStyles.Selected.
 		Foreground(lipgloss.Color("#ffffff")).
 		Background(lipgloss.Color("#FF75B7")).
 		Bold(true)
-	t.SetStyles(s)
+	dependencyTable.SetStyles(defaultTableStyles)
+	versionsTable.SetStyles(defaultTableStyles)
 
 	initialModel := model{
-		dependencies: dependencies,
-		selected:     make(map[int]struct{}),
-		table:        t,
+		dependencies:    deps,
+		selected:        make(map[int]struct{}),
+		dependencyTable: dependencyTable,
+		versionsTable:   versionsTable,
 	}
 
 	p := tea.NewProgram(initialModel)
@@ -183,15 +247,8 @@ func SelectDependencies(deps map[string]dependency.Dependencies) (map[string]dep
 		return nil, fmt.Errorf("selection cancelled by user")
 	}
 
-	for idx := range m.selected {
-		selectedDep := m.dependencies[idx]
-
-		for i, dep := range deps[selectedDep.Env] {
-			if dep.PackageName == selectedDep.PackageName {
-				deps[selectedDep.Env][i].HaveToUpdate = true
-				break
-			}
-		}
+	for i := range m.selected {
+		deps[i].HaveToUpdate = true
 	}
 
 	return deps, nil
