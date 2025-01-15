@@ -12,8 +12,7 @@
             "program": "${workspaceFolder}/cmd/npu/main.go",
             "args": [
                 "-d=../../",
-                "-ni",
-                "-major"
+                "-ni"
             ]
         }
     ]

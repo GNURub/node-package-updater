@@ -60,9 +60,9 @@ func updateVersions(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case " ":
 			depCursor := m.dependencyTable.Cursor()
 			versionCursor := m.versionsTable.Cursor()
-			changed := m.dependencies[depCursor].NextVersion != m.dependencies[depCursor].Versions[versionCursor]
+			changed := m.dependencies[depCursor].NextVersion != m.dependencies[depCursor].Versions.ListVersions()[versionCursor]
 			if changed {
-				m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions[versionCursor]
+				m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions.ListVersions()[versionCursor]
 				m.selected[depCursor] = struct{}{}
 			}
 			m.state = depsView
@@ -115,7 +115,7 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case "right", "l":
 			cursor := m.dependencyTable.Cursor()
 			var rows []table.Row
-			for _, v := range m.dependencies[cursor].Versions {
+			for _, v := range m.dependencies[cursor].Versions.ListVersions() {
 				rows = append(rows, table.Row{
 					m.dependencies[cursor].PackageName,
 					v,

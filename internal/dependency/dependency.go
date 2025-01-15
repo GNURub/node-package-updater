@@ -5,18 +5,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/Masterminds/semver/v3"
+	"github.com/iancoleman/orderedmap"
 	"github.com/valyala/fasthttp"
 )
 
 type NpmRegistryResponse struct {
-	Versions map[string]interface{} `json:"versions"`
+	Versions map[string]struct {
+		Dist *struct {
+			Name         string `json:"name"`
+			UnpackedSize uint64 `json:"unpackedSize"`
+		} `json:"dist"`
+	} `json:"versions"`
 }
 
 type NpmrcConfig struct {
@@ -25,9 +30,57 @@ type NpmrcConfig struct {
 	Scope     string
 }
 
+type Version struct {
+	*semver.Version
+	wight uint64
+}
+
+type Versions struct {
+	*orderedmap.OrderedMap
+}
+
+func NewVersions(versions []*Version) *Versions {
+	orderedMap := orderedmap.New()
+	for _, version := range versions {
+		orderedMap.Set(version.Original(), version)
+	}
+
+	return &Versions{
+		OrderedMap: orderedMap,
+	}
+}
+
+func (v *Versions) Values() []*Version {
+	values := v.OrderedMap.Keys()
+	versions := make([]*Version, len(values))
+	for i, key := range values {
+		if value, ok := v.OrderedMap.Get(key); ok {
+			versions[i] = value.(*Version)
+		}
+	}
+
+	return versions
+}
+
+func (v *Versions) GetVersion(version string) *Version {
+	if version, ok := v.Get(version); ok {
+		return version.(*Version)
+	}
+
+	return nil
+}
+
+func (v *Versions) ListVersions() []string {
+	return v.Keys()
+}
+
+func (v *Versions) Len() int {
+	return len(v.OrderedMap.Keys())
+}
+
 type Dependency struct {
 	*sync.Mutex
-	Versions       []string
+	Versions       *Versions
 	PackageName    string
 	CurrentVersion string
 	NextVersion    string
@@ -118,32 +171,20 @@ func NewDependency(packageName, currentVersion, env string) (*Dependency, error)
 }
 
 func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err error) {
-	var versions []string
+	var vs []*Version
+	versions := NewVersions(vs)
 
 	if exists := cache.Has(d.PackageName); exists {
 		if cached, err := cache.Get(d.PackageName); err == nil {
-			json.Unmarshal(cached, &versions)
+			json.Unmarshal(cached, versions)
 		}
 	}
 
-	if len(versions) == 0 {
+	if versions.Len() == 0 {
 		versions, err = getVersionsFromRegistry(flags.Registry, d.PackageName)
 		if err != nil {
 			return fmt.Errorf("error fetching versions from npm registry: %w", err)
 		}
-
-		// Ordenamos las versiones de mayor a menor
-		sort.SliceStable(versions, func(i, j int) bool {
-			vi, err := semver.NewVersion(versions[i])
-			if err != nil {
-				return false
-			}
-			vj, err := semver.NewVersion(versions[j])
-			if err != nil {
-				return false
-			}
-			return vi.GreaterThan(vj)
-		})
 
 		data, err := json.Marshal(versions)
 		if err != nil {
@@ -174,7 +215,7 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err 
 	return nil
 }
 
-func getVersionsFromRegistry(registry, packageName string) ([]string, error) {
+func getVersionsFromRegistry(registry, packageName string) (*Versions, error) {
 	npmConfig, err := parseNpmrc()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing .npmrc: %w", err)
@@ -218,10 +259,17 @@ func getVersionsFromRegistry(registry, packageName string) ([]string, error) {
 		return nil, fmt.Errorf("error parsing JSON response: %w", err)
 	}
 
-	versions := make([]string, 0, len(npmResp.Versions))
-	for version := range npmResp.Versions {
-		versions = append(versions, version)
+	versions := make([]*Version, 0)
+	for version, v := range npmResp.Versions {
+		if v.Dist == nil {
+			continue
+		}
+
+		versions = append(versions, &Version{
+			Version: semver.MustParse(version),
+			wight:   v.Dist.UnpackedSize,
+		})
 	}
 
-	return versions, nil
+	return NewVersions(versions), nil
 }
