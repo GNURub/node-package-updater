@@ -249,7 +249,7 @@ func getVersionsFromRegistry(registry, packageName string) (*Versions, error) {
 	defer fasthttp.ReleaseRequest(req)
 	req.SetRequestURI(url)
 	req.Header.SetMethod("GET")
-	req.Header.Set("Accept", "application/vnd.npm.install-v1+json")
+	req.Header.Set("Accept", "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*")
 	req.Header.Set("User-Agent", "node-package-updater")
 
 	if isPrivate && npmConfig.AuthToken != "" {

@@ -47,37 +47,30 @@ func NewRootCommand() (*cobra.Command, *Flags) {
 		os.Exit(0)
 	})
 
-	// Opciones generales
 	rootCmd.Flags().StringVarP(&flags.BaseDir, "directory", "d", ".", "Root directory for package search")
 	rootCmd.Flags().StringVarP(&flags.Registry, "registry", "r", "https://registry.npmjs.org/", "NPM registry URL")
 	rootCmd.Flags().StringVarP(&flags.ConfigFile, "config", "c", "", "Path to config file (default: .npmrc)")
 
-	// Opciones de actualización
 	rootCmd.Flags().BoolVarP(&flags.Minor, "minor", "m", false, "Update to latest minor versions")
 	rootCmd.Flags().BoolVarP(&flags.Patch, "patch", "p", false, "Update to latest patch versions")
 	rootCmd.Flags().BoolVarP(&flags.MaintainSemver, "semanticVersion", "s", false, "Maintain semver satisfaction")
 	rootCmd.Flags().BoolVarP(&flags.KeepRangeOperator, "keepRange", "k", true, "Keep range operator on version")
 
-	// Tipos de dependencias
 	rootCmd.Flags().BoolVarP(&flags.Production, "production", "P", false, "Update only production dependencies")
 	rootCmd.Flags().BoolVarP(&flags.PeerDependencies, "includePeer", "i", false, "Include peer dependencies")
 
-	// Opciones de workspace
 	rootCmd.Flags().BoolVarP(&flags.Workspaces, "workspaces", "w", false, "Include workspace repositories")
 
-	// Opciones de comportamiento
 	rootCmd.Flags().BoolVarP(&flags.NoInstall, "noInstall", "n", false, "Do not install packages after updating")
-	rootCmd.Flags().BoolVarP(&flags.NoInteractive, "nonInteractive", "x", false, "Non-interactive mode") // Cambié de 'I' a 'x'
+	rootCmd.Flags().BoolVarP(&flags.NoInteractive, "nonInteractive", "x", false, "Non-interactive mode")
 	rootCmd.Flags().BoolVarP(&flags.DryRun, "dryRun", "D", false, "Show what would be updated without making changes")
 	rootCmd.Flags().BoolVarP(&flags.ShowVersion, "version", "v", false, "Show version")
 	rootCmd.Flags().BoolVarP(&flags.Verbose, "verbose", "V", false, "Show detailed output")
 	rootCmd.Flags().StringVarP(&flags.PackageManager, "packageManager", "M", "", "Package manager to use (npm, yarn, pnpm, bun)")
 	rootCmd.Flags().StringVarP(&flags.LogLevel, "log", "l", "info", "Log level (debug, info, warn, error)")
 
-	// Opciones de rendimiento
 	rootCmd.Flags().IntVarP(&flags.Timeout, "timeout", "t", 30, "Timeout in seconds for each package update")
 
-	// Filtros
 	rootCmd.Flags().StringSliceVarP(&flags.Include, "include", "I", []string{}, "Packages to include (can be specified multiple times)")
 	rootCmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "e", []string{}, "Packages to exclude (can be specified multiple times)")
 
