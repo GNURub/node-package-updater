@@ -71,18 +71,19 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 	return pkg, nil
 }
 
-func (p *PackageJSON) GetWorkspaces() ([]string, error) {
+func (p *PackageJSON) GetWorkspaces() []string {
 	var workspacePaths []string
 	for _, workspace := range p.packageJson.Workspaces {
 		matches, err := filepath.Glob(workspace)
 		if err != nil {
-			return nil, err
+			return workspacePaths
 		}
+
 		for _, match := range matches {
 			workspacePaths = append(workspacePaths, filepath.Join(match, "package.json"))
 		}
 	}
-	return workspacePaths, nil
+	return workspacePaths
 }
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {

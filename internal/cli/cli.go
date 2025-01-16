@@ -11,7 +11,7 @@ type Flags struct {
 	BaseDir           string
 	Minor             bool
 	Patch             bool
-	Workspaces        bool
+	WithWorkspaces    bool
 	NoInteractive     bool
 	Production        bool
 	PeerDependencies  bool
@@ -59,7 +59,7 @@ func NewRootCommand() (*cobra.Command, *Flags) {
 	rootCmd.Flags().BoolVarP(&flags.Production, "production", "P", false, "Update only production dependencies")
 	rootCmd.Flags().BoolVarP(&flags.PeerDependencies, "includePeer", "i", false, "Include peer dependencies")
 
-	rootCmd.Flags().BoolVarP(&flags.Workspaces, "workspaces", "w", false, "Include workspace repositories")
+	rootCmd.Flags().BoolVarP(&flags.WithWorkspaces, "workspaces", "w", false, "Include workspace repositories")
 
 	rootCmd.Flags().BoolVarP(&flags.NoInstall, "noInstall", "n", false, "Do not install packages after updating")
 	rootCmd.Flags().BoolVarP(&flags.NoInteractive, "nonInteractive", "x", false, "Non-interactive mode")

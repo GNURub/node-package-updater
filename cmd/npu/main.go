@@ -44,12 +44,8 @@ func main() {
 		"",
 	}
 
-	if flags.Workspaces {
-		workspaces, err := pkg.GetWorkspaces()
-		if err != nil {
-			log.Fatalf("Error getting workspaces: %v", err)
-		}
-
+	if flags.WithWorkspaces {
+		workspaces := pkg.GetWorkspaces()
 		spaces = append(spaces, workspaces...)
 	}
 
