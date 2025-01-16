@@ -68,7 +68,6 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 	}
 
 	pkg.PackageManager = packagemanager.Detect(path.Dir(pkg.packageFilePath), pkg.packageJson.Manager)
-
 	return pkg, nil
 }
 
@@ -88,11 +87,9 @@ func (p *PackageJSON) GetWorkspaces() ([]string, error) {
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	cache, err := cache.NewCache()
-
 	if err != nil {
 		return fmt.Errorf("error creating cache: %v", err)
 	}
-
 	defer cache.Close()
 
 	var allDeps dependency.Dependencies
@@ -129,7 +126,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	totalDeps := len(allDeps)
-
 	if totalDeps == 0 {
 		return fmt.Errorf("no dependencies found")
 	}
@@ -184,7 +180,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	depsWithNewVersion := allDeps.FilterWithNewVersion()
-
 	if len(depsWithNewVersion) == 0 {
 		return nil
 	}
@@ -199,7 +194,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	depsToUpdate := depsWithNewVersion.FilterForUpdate()
-
 	if len(depsToUpdate) == 0 {
 		fmt.Println("No dependencies to update")
 		return nil
