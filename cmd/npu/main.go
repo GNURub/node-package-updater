@@ -11,7 +11,13 @@ import (
 )
 
 func main() {
-	flags := cli.ParseFlags()
+	// Obtener el comando raíz y las flags
+	rootCmd, flags := cli.NewRootCommand()
+
+	// Ejecutar el comando
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("Error executing command: %v", err)
+	}
 
 	if flags.ShowVersion {
 		fmt.Printf("node-package-updater version %s\n", version.Version)

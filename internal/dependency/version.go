@@ -60,14 +60,5 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (string, error) {
 		return "", nil
 	}
 
-	if flags.KeepRangeOperator {
-		prefixes := []string{">=", ">", "^", "~"}
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(vm.currentVersionStr, prefix) {
-				return fmt.Sprintf("%s%s", prefix, latestVersion), nil
-			}
-		}
-	}
-
 	return latestVersion.String(), nil
 }

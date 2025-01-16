@@ -16,6 +16,8 @@ import (
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/ui"
 	"github.com/GNURub/node-package-updater/internal/updater"
+	"github.com/GNURub/node-package-updater/internal/utils"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/iancoleman/orderedmap"
 )
 
@@ -135,9 +137,13 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	currentPackage := make(chan string, totalDeps)
 	processed := make(chan bool, totalDeps)
 
-	bar, err := ui.ShowProgressBar(totalDeps)
-	if err != nil {
-		return fmt.Errorf("error showing progress bar: %v", err)
+	// Solo mostrar la barra de progreso si NoInteractive es falso
+	var bar *tea.Program
+	if !flags.NoInteractive {
+		bar, err = ui.ShowProgressBar(totalDeps)
+		if err != nil {
+			return fmt.Errorf("error showing progress bar: %v", err)
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -152,22 +158,30 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		for {
 			select {
 			case packageName := <-currentPackage:
-				bar.Send(ui.PackageName(packageName))
+				if bar != nil {
+					bar.Send(ui.PackageName(packageName))
+				}
 			case <-processed:
 				wg.Done()
 				currentProcessed++
-				percentage := float64(currentProcessed) / float64(totalDeps)
-				bar.Send(ui.ProgressMsg{Percentage: percentage, CurrentPackageIndex: currentProcessed})
+				if bar != nil {
+					percentage := float64(currentProcessed) / float64(totalDeps)
+					bar.Send(ui.ProgressMsg{Percentage: percentage, CurrentPackageIndex: currentProcessed})
+				}
 			}
 		}
 	}()
 
-	bar.Run()
+	if bar != nil {
+		bar.Run()
+	}
 
 	wg.Wait()
 
-	bar.ReleaseTerminal()
-	bar.Kill()
+	if bar != nil {
+		bar.ReleaseTerminal()
+		bar.Kill()
+	}
 
 	depsWithNewVersion := allDeps.FilterWithNewVersion()
 
@@ -175,6 +189,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		return nil
 	}
 
+	// Solo permitir la selección interactiva si NoInteractive es falso
 	if !flags.NoInteractive {
 		depsWithNewVersion, _ = ui.SelectDependencies(depsWithNewVersion)
 	} else {
@@ -190,7 +205,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		return nil
 	}
 
-	err = p.updatePackageJSON(depsToUpdate)
+	err = p.updatePackageJSON(flags, depsToUpdate)
 	if err != nil {
 		return fmt.Errorf("error updating package.json: %v", err)
 	}
@@ -206,7 +221,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	return nil
 }
 
-func (p *PackageJSON) updatePackageJSON(updatedDeps dependency.Dependencies) error {
+func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency.Dependencies) error {
 	// Leer el archivo original
 	originalData, err := os.ReadFile(p.packageFilePath)
 	if err != nil {
@@ -229,7 +244,14 @@ func (p *PackageJSON) updatePackageJSON(updatedDeps dependency.Dependencies) err
 	for _, dep := range updatedDeps {
 		if depsValue, ok := orderedJSON.Get(depSections[dep.Env]); ok {
 			if depsMap, ok := depsValue.(orderedmap.OrderedMap); ok {
-				depsMap.Set(dep.PackageName, dep.NextVersion)
+				currentVersion := dep.CurrentVersionStr
+				updatedVersion := dep.NextVersion
+
+				if flags.KeepRangeOperator {
+					updatedVersion = fmt.Sprintf("%s%s", utils.GetPrefix(currentVersion), updatedVersion)
+				}
+
+				depsMap.Set(dep.PackageName, updatedVersion)
 			}
 		}
 	}

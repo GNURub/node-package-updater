@@ -11,6 +11,7 @@ import (
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
+	"github.com/GNURub/node-package-updater/internal/utils"
 	"github.com/Masterminds/semver/v3"
 	"github.com/iancoleman/orderedmap"
 	"github.com/valyala/fasthttp"
@@ -33,7 +34,7 @@ type NpmrcConfig struct {
 
 type Version struct {
 	*semver.Version
-	wight uint64
+	Weight uint64
 }
 
 type Versions struct {
@@ -86,12 +87,13 @@ func (v *Versions) Len() int {
 
 type Dependency struct {
 	*sync.Mutex
-	Versions       *Versions
-	PackageName    string
-	CurrentVersion string
-	NextVersion    string
-	HaveToUpdate   bool
-	Env            string
+	Versions          *Versions
+	PackageName       string
+	CurrentVersion    *semver.Version
+	CurrentVersionStr string
+	NextVersion       string
+	HaveToUpdate      bool
+	Env               string
 }
 
 type Dependencies []*Dependency
@@ -167,12 +169,18 @@ func parseNpmrc() (*NpmrcConfig, error) {
 }
 
 func NewDependency(packageName, currentVersion, env string) (*Dependency, error) {
+	version, err := semver.NewVersion(utils.GetVersionWithoutPrefix(currentVersion))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing version: %w", err)
+	}
+
 	return &Dependency{
-		PackageName:    packageName,
-		CurrentVersion: currentVersion,
-		NextVersion:    "",
-		Env:            env,
-		HaveToUpdate:   false,
+		PackageName:       packageName,
+		CurrentVersionStr: currentVersion,
+		CurrentVersion:    version,
+		NextVersion:       "",
+		Env:               env,
+		HaveToUpdate:      false,
 	}, nil
 }
 
@@ -203,7 +211,7 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err 
 
 	d.Versions = versions
 
-	vm, err := NewVersionManager(d.CurrentVersion, versions, flags)
+	vm, err := NewVersionManager(d.CurrentVersionStr, versions, flags)
 	if err != nil {
 		return fmt.Errorf("error creating version manager: %w", err)
 	}
@@ -274,7 +282,7 @@ func getVersionsFromRegistry(registry, packageName string) (*Versions, error) {
 
 		versions = append(versions, &Version{
 			Version: semver.MustParse(version),
-			wight:   v.Dist.UnpackedSize,
+			Weight:  v.Dist.UnpackedSize,
 		})
 	}
 
