@@ -266,7 +266,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 	versionsTableColumns := []table.Column{
 		{Title: "Dependency", Width: 15},
 		{Title: "Version", Width: 15},
-		{Title: "Weight", Width: 30},
+		{Title: "Diff weight", Width: 30},
 	}
 
 	var rows []table.Row

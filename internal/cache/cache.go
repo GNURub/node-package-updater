@@ -25,7 +25,7 @@ func NewCache() (*Cache, error) {
 		return nil, err
 	}
 
-	return &Cache{db: db}, nil
+	return &Cache{db}, nil
 }
 
 func (cache *Cache) Close() error {
