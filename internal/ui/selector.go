@@ -44,6 +44,18 @@ func tick() tea.Cmd {
 	})
 }
 
+func drawStyleForNewVersion(dep *dependency.Dependency) string {
+	if dep.CurrentVersion.Major() < dep.NextVersion.Major() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")).Render(dep.NextVersion.String())
+	} else if dep.CurrentVersion.Minor() < dep.NextVersion.Minor() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ffa502")).Render(dep.NextVersion.String())
+	} else if dep.CurrentVersion.Patch() < dep.NextVersion.Patch() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")).Render(dep.NextVersion.String())
+	}
+
+	return dep.NextVersion.String()
+}
+
 func (m model) Init() tea.Cmd {
 	return tick()
 }
@@ -62,7 +74,7 @@ func updateVersions(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case " ", "enter":
 			depCursor := m.dependencyTable.Cursor()
 			versionCursor := m.versionsTable.Cursor()
-			m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions.ListVersions()[versionCursor]
+			m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions.Values()[versionCursor].Version
 			m.selected[depCursor] = struct{}{}
 			m.state = depsView
 			m.dependencyTable.Focus()
@@ -155,7 +167,7 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					s.String(),
 				})
 
-				if strVersion == m.dependencies[cursor].NextVersion {
+				if m.dependencies[cursor].NextVersion.Equal(v.Version) {
 					cursorVersion = i
 				}
 			}
@@ -228,7 +240,7 @@ func (m model) View() string {
 			} else {
 				rows[i][0] = " "
 			}
-			rows[i][3] = m.dependencies[i].NextVersion
+			rows[i][3] = drawStyleForNewVersion(m.dependencies[i])
 		}
 		m.dependencyTable.SetRows(rows)
 
@@ -247,8 +259,8 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		{Title: "", Width: 2},
 		{Title: "Dependency", Width: 30},
 		{Title: "Current Version", Width: 15},
-		{Title: "New Version", Width: 15},
-		{Title: "Type", Width: 15},
+		{Title: "New Version", Width: 30},
+		{Title: "Environment", Width: 15},
 	}
 
 	versionsTableColumns := []table.Column{
@@ -263,7 +275,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 			" ",
 			dep.PackageName,
 			dep.CurrentVersionStr,
-			dep.NextVersion,
+			drawStyleForNewVersion(dep),
 			dep.Env,
 		})
 	}

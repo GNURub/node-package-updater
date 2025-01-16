@@ -239,7 +239,7 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 		if depsValue, ok := orderedJSON.Get(depSections[dep.Env]); ok {
 			if depsMap, ok := depsValue.(orderedmap.OrderedMap); ok {
 				currentVersion := dep.CurrentVersionStr
-				updatedVersion := dep.NextVersion
+				updatedVersion := dep.NextVersion.String()
 
 				if flags.KeepRangeOperator {
 					updatedVersion = fmt.Sprintf("%s%s", utils.GetPrefix(currentVersion), updatedVersion)

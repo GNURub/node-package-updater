@@ -42,7 +42,7 @@ func NewVersionManager(current string, versions *Versions, flags *cli.Flags) (*V
 	}, nil
 }
 
-func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (string, error) {
+func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, error) {
 	var latestVersion *semver.Version
 
 	for _, v := range vm.versions {
@@ -53,12 +53,12 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (string, error) {
 	}
 
 	if latestVersion == nil {
-		return "", fmt.Errorf("no matching version found")
+		return nil, fmt.Errorf("no matching version found")
 	}
 
 	if vm.currentVersion.Equal(latestVersion) {
-		return "", nil
+		return nil, nil
 	}
 
-	return latestVersion.String(), nil
+	return latestVersion, nil
 }
