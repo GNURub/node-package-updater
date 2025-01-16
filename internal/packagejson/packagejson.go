@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -22,6 +24,10 @@ import (
 )
 
 type Option func(*PackageJSON)
+
+type pnpmWorkspace struct {
+	Packages []string `yaml:"packages"`
+}
 
 type PackageJSON struct {
 	packageFilePath string
@@ -71,18 +77,80 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 	return pkg, nil
 }
 
+func (p *PackageJSON) getWorkspacesFromPnpm() ([]string, error) {
+	var workspacePaths []string
+
+	// Leer y analizar pnpm-workspace.yaml
+	fileContent, err := os.ReadFile("pnpm-workspace.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("error reading pnpm-workspace.yaml: %w", err)
+	}
+
+	var workspaceConfig pnpmWorkspace
+	err = yaml.Unmarshal(fileContent, &workspaceConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing YAML: %w", err)
+	}
+
+	// Procesar cada patrón definido en "packages"
+	for _, pattern := range workspaceConfig.Packages {
+		isExclusion := strings.HasPrefix(pattern, "!")
+
+		// Remover el prefijo de exclusión si está presente
+		cleanPattern := strings.TrimPrefix(pattern, "!")
+
+		// Resolver el patrón usando filepath.Glob
+		matches, err := filepath.Glob(cleanPattern)
+		if err != nil {
+			return nil, fmt.Errorf("error processing pattern %s: %w", pattern, err)
+		}
+
+		// Procesar resultados
+		for _, match := range matches {
+			packageJSONPath := filepath.Join(p.basedir, match, "package.json")
+
+			// Verificar si el archivo package.json existe
+			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
+				if isExclusion {
+					// Remover las rutas excluidas
+					workspacePaths = removePath(workspacePaths, filepath.Dir(packageJSONPath))
+				} else {
+					// Agregar rutas incluidas
+					workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
+				}
+			}
+		}
+	}
+
+	return workspacePaths, nil
+}
+
 func (p *PackageJSON) GetWorkspaces() []string {
 	var workspacePaths []string
+
+	if p.PackageManager == packagemanager.Pnpm {
+		ws, err := p.getWorkspacesFromPnpm()
+
+		if err != nil {
+			workspacePaths = append(workspacePaths, ws...)
+		}
+	}
+
 	for _, workspace := range p.packageJson.Workspaces {
 		matches, err := filepath.Glob(workspace)
 		if err != nil {
-			return workspacePaths
+			continue
 		}
 
 		for _, match := range matches {
-			workspacePaths = append(workspacePaths, filepath.Join(match, "package.json"))
+			packageJSONPath := filepath.Join(match, "package.json")
+
+			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
+				workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
+			}
 		}
 	}
+
 	return workspacePaths
 }
 
@@ -208,9 +276,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	fmt.Println("All dependencies processed")
 
 	if !flags.NoInstall {
-		if err := p.PackageManager.Install(); err != nil {
-			log.Printf("Warning: Error installing workspace %s: %v", p.basedir, err)
-		}
+		p.PackageManager.Install()
 	}
 
 	return nil
@@ -270,4 +336,14 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	return nil
+}
+
+func removePath(paths []string, target string) []string {
+	var result []string
+	for _, path := range paths {
+		if path != target {
+			result = append(result, path)
+		}
+	}
+	return result
 }
