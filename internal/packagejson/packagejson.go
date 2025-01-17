@@ -3,6 +3,7 @@ package packagejson
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -67,7 +68,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	fullPackageJSONPath := path.Join(pkg.Dir, "package.json")
 	data, err := os.ReadFile(fullPackageJSONPath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading package.json on %s: %v", pkg.Dir, err)
+		return nil, errors.New("no package.json found")
 	}
 
 	pkg.packageFilePath = fullPackageJSONPath
@@ -81,7 +82,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 
 	for _, opt := range opts {
 		if err := opt(pkg); err != nil {
-			return nil, fmt.Errorf("failed to apply option: %w", err)
+			return nil, fmt.Errorf("error applying option: %w", err)
 		}
 	}
 
@@ -97,7 +98,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				WithPackageManager(pkg.packageJson.Manager),
 			)
 			if err != nil {
-				return nil, fmt.Errorf("error loading workspace %s package.json: %v", workspacePath, err)
+				return nil, fmt.Errorf("error loading workspace package.json: %s", workspacePath)
 			}
 			pkg.workspacesPkgs[workspacePath] = workspacePkg
 		}
@@ -111,9 +112,13 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	cache, err := cache.NewCache()
 	if err != nil {
-		return fmt.Errorf("error creating cache: %v", err)
+		return errors.New("error creating cache")
 	}
 	defer cache.Close()
+
+	if flags.CleanCache {
+		cache.Clean()
+	}
 
 	var allDeps dependency.Dependencies
 
@@ -152,7 +157,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	totalDeps := len(allDeps)
 	if totalDeps == 0 {
-		return nil
+		return errors.New("no dependencies to update")
 	}
 
 	currentPackageName := make(chan string, totalDeps)
@@ -161,10 +166,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	// Solo mostrar la barra de progreso si NoInteractive es falso
 	var bar *tea.Program
 	if !flags.NoInteractive {
-		bar, err = ui.ShowProgressBar(totalDeps)
-		if err != nil {
-			return fmt.Errorf("error showing progress bar: %v", err)
-		}
+		bar, _ = ui.ShowProgressBar(totalDeps)
 	}
 
 	var wg sync.WaitGroup
@@ -206,7 +208,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	depsWithNewVersion := allDeps.FilterWithNewVersion()
 	if len(depsWithNewVersion) == 0 {
-		return nil
+		return errors.New("no dependencies to update")
 	}
 
 	// Solo permitir la selección interactiva si NoInteractive es falso
@@ -220,8 +222,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	depsToUpdate := depsWithNewVersion.FilterForUpdate()
 	if len(depsToUpdate) == 0 {
-		fmt.Println("No dependencies to update")
-		return nil
+		return errors.New("no dependencies to update")
 	}
 
 	var depsByWorkspace = make(map[string]dependency.Dependencies)

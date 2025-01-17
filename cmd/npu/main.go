@@ -5,6 +5,7 @@ import (
 
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
+	"github.com/GNURub/node-package-updater/internal/styles"
 	"github.com/GNURub/node-package-updater/internal/version"
 )
 
@@ -37,11 +38,11 @@ func main() {
 	)
 
 	if err != nil {
-		fmt.Printf("Error loading package.json: %v", err)
+		fmt.Println(styles.ErrorStyle.Render(err.Error()))
 		return
 	}
 
 	if err := pkg.ProcessDependencies(flags); err != nil {
-		fmt.Printf("Warning: Error processing pkg: %v", err)
+		fmt.Println(styles.ErrorStyle.Render(err.Error()))
 	}
 }

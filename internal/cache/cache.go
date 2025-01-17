@@ -28,6 +28,10 @@ func NewCache() (*Cache, error) {
 	return &Cache{db}, nil
 }
 
+func (cache *Cache) Clean() error {
+	return cache.db.DeleteAll()
+}
+
 func (cache *Cache) Close() error {
 	return cache.db.Close()
 }

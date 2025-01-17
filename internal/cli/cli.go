@@ -8,6 +8,7 @@ import (
 )
 
 type Flags struct {
+	CleanCache        bool
 	BaseDir           string
 	ConfigFile        string
 	DryRun            bool
@@ -46,6 +47,8 @@ func NewRootCommand() (*cobra.Command, *Flags) {
 		helpFunc(c, s)
 		os.Exit(0)
 	})
+
+	rootCmd.Flags().BoolVarP(&flags.CleanCache, "cleanCache", "C", false, "Clean cache")
 
 	rootCmd.Flags().StringVarP(&flags.BaseDir, "dir", "d", "", "Root directory for package search")
 	rootCmd.Flags().StringVarP(&flags.Registry, "registry", "r", "https://registry.npmjs.org/", "NPM registry URL")
