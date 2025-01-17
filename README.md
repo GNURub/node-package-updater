@@ -8,6 +8,12 @@
 go install github.com/GNURub/node-package-updater/cmd/npu
 ```
 
+or
+
+```bash
+npm install -g node-package-updater
+```
+
 ## Usage
 
 ```bash
