@@ -286,13 +286,13 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		table.WithColumns(dependencyTableColumns),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(7),
+		table.WithHeight(10),
 	)
 
 	versionsTable := table.New(
 		table.WithColumns(versionsTableColumns),
 		table.WithFocused(false),
-		table.WithHeight(7),
+		table.WithHeight(10),
 	)
 
 	defaultTableStyles := table.DefaultStyles()
