@@ -59,8 +59,10 @@ func EnableWorkspaces() Option {
 	}
 }
 
-func LoadPackageJSON(opts ...Option) (*PackageJSON, error) {
-	pkg := &PackageJSON{}
+func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
+	pkg := &PackageJSON{
+		Dir: dir,
+	}
 
 	fullPackageJSONPath := path.Join(pkg.Dir, "package.json")
 	data, err := os.ReadFile(fullPackageJSONPath)
@@ -91,7 +93,7 @@ func LoadPackageJSON(opts ...Option) (*PackageJSON, error) {
 			}
 
 			workspacePkg, err := LoadPackageJSON(
-				WithBaseDir(workspacePath),
+				workspacePath,
 				WithPackageManager(pkg.packageJson.Manager),
 			)
 			if err != nil {
@@ -223,7 +225,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	var depsByWorkspace = make(map[string]dependency.Dependencies)
-	for _, dep := range allDeps {
+	for _, dep := range depsToUpdate {
 		if _, ok := depsByWorkspace[dep.Workspace]; !ok {
 			depsByWorkspace[dep.Workspace] = make(dependency.Dependencies, 0)
 			depsByWorkspace[dep.Workspace] = append(depsByWorkspace[dep.Workspace], dep)

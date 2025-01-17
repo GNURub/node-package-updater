@@ -47,7 +47,7 @@ func NewRootCommand() (*cobra.Command, *Flags) {
 		os.Exit(0)
 	})
 
-	rootCmd.Flags().StringVarP(&flags.BaseDir, "directory", "d", "", "Root directory for package search")
+	rootCmd.Flags().StringVarP(&flags.BaseDir, "dir", "d", "", "Root directory for package search")
 	rootCmd.Flags().StringVarP(&flags.Registry, "registry", "r", "https://registry.npmjs.org/", "NPM registry URL")
 	rootCmd.Flags().StringVarP(&flags.ConfigFile, "config", "c", "", "Path to config file (default: .npmrc)")
 

@@ -21,9 +21,7 @@ func main() {
 		return
 	}
 
-	options := []packagejson.Option{
-		packagejson.WithBaseDir(flags.BaseDir),
-	}
+	options := []packagejson.Option{}
 
 	if flags.PackageManager != "" {
 		options = append(options, packagejson.WithPackageManager(flags.PackageManager))
@@ -34,6 +32,7 @@ func main() {
 	}
 
 	pkg, err := packagejson.LoadPackageJSON(
+		flags.BaseDir,
 		options...,
 	)
 
