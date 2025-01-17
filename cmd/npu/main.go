@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
@@ -13,7 +12,8 @@ func main() {
 	rootCmd, flags := cli.NewRootCommand()
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Error executing command: %v", err)
+		fmt.Print(err)
+		return
 	}
 
 	if flags.ShowVersion {
@@ -37,10 +37,11 @@ func main() {
 	)
 
 	if err != nil {
-		log.Fatalf("Error reading package.json: %v", err)
+		fmt.Printf("Error loading package.json: %v", err)
+		return
 	}
 
 	if err := pkg.ProcessDependencies(flags); err != nil {
-		log.Printf("Warning: Error processing pkg: %v", err)
+		fmt.Printf("Warning: Error processing pkg: %v", err)
 	}
 }

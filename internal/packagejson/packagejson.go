@@ -152,7 +152,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	totalDeps := len(allDeps)
 	if totalDeps == 0 {
-		return fmt.Errorf("no dependencies found")
+		return nil
 	}
 
 	currentPackageName := make(chan string, totalDeps)
