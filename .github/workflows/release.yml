@@ -33,7 +33,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             binary_name=$binary_name.exe
           fi
-          go build -o "dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}" .
+          go build -o "dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}" cmd/npu/main.go
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
