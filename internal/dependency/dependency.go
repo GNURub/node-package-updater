@@ -1,6 +1,8 @@
 package dependency
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -119,13 +120,14 @@ func (versions *Versions) Save(pkgName string, cache *cache.Cache) error {
 		}
 	}
 
-	d, err := json.Marshal(m)
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
 
-	if err != nil {
-		return err
+	if err := encoder.Encode(m); err != nil {
+		return fmt.Errorf("error encoding versions: %w", err)
 	}
 
-	return cache.Set(pkgName, d)
+	return cache.Set(pkgName, buf.Bytes())
 }
 
 func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
@@ -139,11 +141,13 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 		return err
 	}
 
-	var m = make(map[string]versionJson)
-	err = json.Unmarshal(d, &m)
+	buf := bytes.NewBuffer(d)
+	decoder := gob.NewDecoder(buf)
 
-	if err != nil {
-		return err
+	var m = make(map[string]versionJson)
+
+	if err := decoder.Decode(&m); err != nil {
+		return fmt.Errorf("error decoding versions: %w", err)
 	}
 
 	vs := make([]*Version, 0, len(m))
@@ -162,7 +166,6 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 }
 
 type Dependency struct {
-	mx                *sync.Mutex
 	Versions          *Versions
 	PackageName       string
 	CurrentVersion    *semver.Version

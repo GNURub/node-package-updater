@@ -84,7 +84,7 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m progressModel) View() string {
 	if m.done {
-		return style.Render("🎉! All dependencies updated successfully!\n")
+		return ""
 	}
 
 	var s strings.Builder

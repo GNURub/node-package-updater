@@ -52,7 +52,7 @@ func WithBaseDir(basedir string) Option {
 	}
 }
 
-func WithWorkspaces() Option {
+func EnableWorkspaces() Option {
 	return func(p *PackageJSON) error {
 		p.processWorkspaces = true
 		return nil
@@ -86,12 +86,16 @@ func LoadPackageJSON(opts ...Option) (*PackageJSON, error) {
 	if pkg.processWorkspaces {
 		workspacesPaths := pkg.PackageManager.GetWorkspacesPaths(pkg.Dir, pkg.packageJson.Workspaces)
 		for _, workspacePath := range workspacesPaths {
+			if _, ok := pkg.workspacesPkgs[workspacePath]; ok {
+				continue
+			}
+
 			workspacePkg, err := LoadPackageJSON(
 				WithBaseDir(workspacePath),
 				WithPackageManager(pkg.packageJson.Manager),
 			)
 			if err != nil {
-				return nil, fmt.Errorf("error loading workspace package.json: %v", err)
+				return nil, fmt.Errorf("error loading workspace %s package.json: %v", workspacePath, err)
 			}
 			pkg.workspacesPkgs[workspacePath] = workspacePkg
 		}
@@ -236,7 +240,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
-	fmt.Println("All dependencies processed")
+	fmt.Println("🎉! All dependencies updated successfully!")
 
 	if !flags.NoInstall {
 		p.PackageManager.Install()

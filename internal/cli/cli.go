@@ -9,25 +9,25 @@ import (
 
 type Flags struct {
 	BaseDir           string
-	Minor             bool
-	Patch             bool
-	WithWorkspaces    bool
-	NoInteractive     bool
-	Production        bool
-	PeerDependencies  bool
-	MaintainSemver    bool
-	Registry          string
-	DryRun            bool
-	Verbose           bool
-	LogLevel          string
-	Include           []string
-	Exclude           []string
 	ConfigFile        string
-	Timeout           int
-	NoInstall         bool
-	ShowVersion       bool
-	PackageManager    string
+	DryRun            bool
+	Exclude           []string
+	Include           []string
 	KeepRangeOperator bool
+	LogLevel          string
+	MaintainSemver    bool
+	Minor             bool
+	NoInstall         bool
+	NoInteractive     bool
+	PackageManager    string
+	Patch             bool
+	PeerDependencies  bool
+	Production        bool
+	Registry          string
+	ShowVersion       bool
+	Timeout           int
+	Verbose           bool
+	WithWorkspaces    bool
 }
 
 func NewRootCommand() (*cobra.Command, *Flags) {
@@ -47,7 +47,7 @@ func NewRootCommand() (*cobra.Command, *Flags) {
 		os.Exit(0)
 	})
 
-	rootCmd.Flags().StringVarP(&flags.BaseDir, "directory", "d", ".", "Root directory for package search")
+	rootCmd.Flags().StringVarP(&flags.BaseDir, "directory", "d", "", "Root directory for package search")
 	rootCmd.Flags().StringVarP(&flags.Registry, "registry", "r", "https://registry.npmjs.org/", "NPM registry URL")
 	rootCmd.Flags().StringVarP(&flags.ConfigFile, "config", "c", "", "Path to config file (default: .npmrc)")
 

@@ -10,10 +10,8 @@ import (
 )
 
 func main() {
-	// Obtener el comando raíz y las flags
 	rootCmd, flags := cli.NewRootCommand()
 
-	// Ejecutar el comando
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("Error executing command: %v", err)
 	}
@@ -32,7 +30,7 @@ func main() {
 	}
 
 	if flags.WithWorkspaces {
-		options = append(options, packagejson.WithWorkspaces())
+		options = append(options, packagejson.EnableWorkspaces())
 	}
 
 	pkg, err := packagejson.LoadPackageJSON(

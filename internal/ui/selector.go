@@ -261,6 +261,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		{Title: "Current Version", Width: 15},
 		{Title: "New Version", Width: 30},
 		{Title: "Environment", Width: 15},
+		{Title: "Workspace", Width: 20},
 	}
 
 	versionsTableColumns := []table.Column{
@@ -277,6 +278,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 			dep.CurrentVersionStr,
 			drawStyleForNewVersion(dep),
 			dep.Env,
+			dep.Workspace,
 		})
 	}
 
