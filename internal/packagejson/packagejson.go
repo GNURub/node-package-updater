@@ -80,8 +80,7 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 func (p *PackageJSON) getWorkspacesFromPnpm() ([]string, error) {
 	var workspacePaths []string
 
-	// Leer y analizar pnpm-workspace.yaml
-	fileContent, err := os.ReadFile("pnpm-workspace.yaml")
+	fileContent, err := os.ReadFile(filepath.Join(p.basedir, "pnpm-workspace.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("error reading pnpm-workspace.yaml: %w", err)
 	}
@@ -92,32 +91,23 @@ func (p *PackageJSON) getWorkspacesFromPnpm() ([]string, error) {
 		return nil, fmt.Errorf("error parsing YAML: %w", err)
 	}
 
-	// Procesar cada patrón definido en "packages"
 	for _, pattern := range workspaceConfig.Packages {
 		isExclusion := strings.HasPrefix(pattern, "!")
 
-		// Remover el prefijo de exclusión si está presente
-		cleanPattern := strings.TrimPrefix(pattern, "!")
+		if isExclusion {
+			continue
+		}
 
-		// Resolver el patrón usando filepath.Glob
-		matches, err := filepath.Glob(cleanPattern)
+		matches, err := filepath.Glob(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("error processing pattern %s: %w", pattern, err)
 		}
 
-		// Procesar resultados
 		for _, match := range matches {
 			packageJSONPath := filepath.Join(p.basedir, match, "package.json")
 
-			// Verificar si el archivo package.json existe
 			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
-				if isExclusion {
-					// Remover las rutas excluidas
-					workspacePaths = removePath(workspacePaths, filepath.Dir(packageJSONPath))
-				} else {
-					// Agregar rutas incluidas
-					workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
-				}
+				workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
 			}
 		}
 	}
@@ -336,14 +326,4 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	return nil
-}
-
-func removePath(paths []string, target string) []string {
-	var result []string
-	for _, path := range paths {
-		if path != target {
-			result = append(result, path)
-		}
-	}
-	return result
 }

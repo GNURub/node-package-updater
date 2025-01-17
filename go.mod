@@ -11,6 +11,7 @@ require (
 	github.com/iancoleman/orderedmap v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/valyala/fasthttp v1.58.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -34,6 +35,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/plar/go-adaptive-radix-tree v1.0.7 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -41,5 +43,4 @@ require (
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
