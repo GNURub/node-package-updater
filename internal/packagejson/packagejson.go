@@ -6,11 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
-	"strings"
 	"sync"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -23,17 +19,15 @@ import (
 	"github.com/iancoleman/orderedmap"
 )
 
-type Option func(*PackageJSON)
-
-type pnpmWorkspace struct {
-	Packages []string `yaml:"packages"`
-}
+type Option func(*PackageJSON) error
 
 type PackageJSON struct {
-	packageFilePath string
-	basedir         string
-	PackageManager  *packagemanager.PackageManager
-	packageJson     struct {
+	packageFilePath   string
+	Dir               string
+	PackageManager    *packagemanager.PackageManager
+	workspacesPkgs    map[string]*PackageJSON
+	processWorkspaces bool
+	packageJson       struct {
 		Manager          string            `json:"packageManager,omitempty"`
 		Dependencies     map[string]string `json:"dependencies,omitempty"`
 		DevDependencies  map[string]string `json:"devDependencies,omitempty"`
@@ -43,28 +37,35 @@ type PackageJSON struct {
 }
 
 func WithPackageManager(manager string) Option {
-	return func(s *PackageJSON) {
+	return func(s *PackageJSON) error {
 		s.packageJson.Manager = manager
+
+		return nil
 	}
 }
 
 func WithBaseDir(basedir string) Option {
-	return func(s *PackageJSON) {
-		s.basedir = basedir
+	return func(s *PackageJSON) error {
+		s.Dir = basedir
+
+		return nil
 	}
 }
 
-func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
+func WithWorkspaces() Option {
+	return func(p *PackageJSON) error {
+		p.processWorkspaces = true
+		return nil
+	}
+}
+
+func LoadPackageJSON(opts ...Option) (*PackageJSON, error) {
 	pkg := &PackageJSON{}
 
-	for _, o := range options {
-		o(pkg)
-	}
-
-	fullPackageJSONPath := path.Join(pkg.basedir, "package.json")
+	fullPackageJSONPath := path.Join(pkg.Dir, "package.json")
 	data, err := os.ReadFile(fullPackageJSONPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading package.json on %s: %v", pkg.Dir, err)
 	}
 
 	pkg.packageFilePath = fullPackageJSONPath
@@ -73,75 +74,32 @@ func LoadPackageJSON(options ...Option) (*PackageJSON, error) {
 		return nil, err
 	}
 
-	pkg.PackageManager = packagemanager.Detect(path.Dir(pkg.packageFilePath), pkg.packageJson.Manager)
+	pkg.workspacesPkgs = make(map[string]*PackageJSON)
+	pkg.PackageManager = packagemanager.Detect(pkg.Dir, pkg.packageJson.Manager)
+
+	for _, opt := range opts {
+		if err := opt(pkg); err != nil {
+			return nil, fmt.Errorf("failed to apply option: %w", err)
+		}
+	}
+
+	if pkg.processWorkspaces {
+		workspacesPaths := pkg.PackageManager.GetWorkspacesPaths(pkg.Dir, pkg.packageJson.Workspaces)
+		for _, workspacePath := range workspacesPaths {
+			workspacePkg, err := LoadPackageJSON(
+				WithBaseDir(workspacePath),
+				WithPackageManager(pkg.packageJson.Manager),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error loading workspace package.json: %v", err)
+			}
+			pkg.workspacesPkgs[workspacePath] = workspacePkg
+		}
+	}
+
+	pkg.workspacesPkgs[pkg.Dir] = pkg
+
 	return pkg, nil
-}
-
-func (p *PackageJSON) getWorkspacesFromPnpm() ([]string, error) {
-	var workspacePaths []string
-
-	fileContent, err := os.ReadFile(filepath.Join(p.basedir, "pnpm-workspace.yaml"))
-	if err != nil {
-		return nil, fmt.Errorf("error reading pnpm-workspace.yaml: %w", err)
-	}
-
-	var workspaceConfig pnpmWorkspace
-	err = yaml.Unmarshal(fileContent, &workspaceConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing YAML: %w", err)
-	}
-
-	for _, pattern := range workspaceConfig.Packages {
-		isExclusion := strings.HasPrefix(pattern, "!")
-
-		if isExclusion {
-			continue
-		}
-
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			return nil, fmt.Errorf("error processing pattern %s: %w", pattern, err)
-		}
-
-		for _, match := range matches {
-			packageJSONPath := filepath.Join(p.basedir, match, "package.json")
-
-			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
-				workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
-			}
-		}
-	}
-
-	return workspacePaths, nil
-}
-
-func (p *PackageJSON) GetWorkspaces() []string {
-	var workspacePaths []string
-
-	if p.PackageManager == packagemanager.Pnpm {
-		ws, err := p.getWorkspacesFromPnpm()
-
-		if err != nil {
-			workspacePaths = append(workspacePaths, ws...)
-		}
-	}
-
-	for _, workspace := range p.packageJson.Workspaces {
-		matches, err := filepath.Glob(workspace)
-		if err != nil {
-			continue
-		}
-
-		for _, match := range matches {
-			packageJSONPath := filepath.Join(match, "package.json")
-
-			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
-				workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
-			}
-		}
-	}
-
-	return workspacePaths
 }
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
@@ -153,18 +111,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	var allDeps dependency.Dependencies
 
-	for name, version := range p.packageJson.Dependencies {
-		d, err := dependency.NewDependency(name, version, "prod")
-		if err != nil {
-			fmt.Printf("Error creating dependency %s: %v\n", name, err)
-			continue
-		}
-		allDeps = append(allDeps, d)
-	}
-
-	if !flags.Production {
-		for name, version := range p.packageJson.DevDependencies {
-			d, err := dependency.NewDependency(name, version, "dev")
+	for workspace, pkg := range p.workspacesPkgs {
+		for name, version := range pkg.packageJson.Dependencies {
+			d, err := dependency.NewDependency(name, version, "prod", workspace)
 			if err != nil {
 				fmt.Printf("Error creating dependency %s: %v\n", name, err)
 				continue
@@ -172,14 +121,25 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 			allDeps = append(allDeps, d)
 		}
 
-		if flags.PeerDependencies {
-			for name, version := range p.packageJson.PeerDependencies {
-				d, err := dependency.NewDependency(name, version, "peer")
+		if !flags.Production {
+			for name, version := range p.packageJson.DevDependencies {
+				d, err := dependency.NewDependency(name, version, "dev", workspace)
 				if err != nil {
 					fmt.Printf("Error creating dependency %s: %v\n", name, err)
 					continue
 				}
 				allDeps = append(allDeps, d)
+			}
+
+			if flags.PeerDependencies {
+				for name, version := range p.packageJson.PeerDependencies {
+					d, err := dependency.NewDependency(name, version, "peer", workspace)
+					if err != nil {
+						fmt.Printf("Error creating dependency %s: %v\n", name, err)
+						continue
+					}
+					allDeps = append(allDeps, d)
+				}
 			}
 		}
 	}
@@ -189,8 +149,8 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		return fmt.Errorf("no dependencies found")
 	}
 
-	currentPackage := make(chan string, totalDeps)
-	processed := make(chan bool, totalDeps)
+	currentPackageName := make(chan string, totalDeps)
+	dependencyProcessed := make(chan bool, totalDeps)
 
 	// Solo mostrar la barra de progreso si NoInteractive es falso
 	var bar *tea.Program
@@ -205,18 +165,18 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	wg.Add(totalDeps)
 
 	go func() {
-		updater.FetchNewVersions(allDeps, flags, processed, currentPackage, cache)
+		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, cache)
 	}()
 
 	go func() {
 		currentProcessed := 0
 		for {
 			select {
-			case packageName := <-currentPackage:
+			case packageName := <-currentPackageName:
 				if bar != nil {
 					bar.Send(ui.PackageName(packageName))
 				}
-			case <-processed:
+			case <-dependencyProcessed:
 				wg.Done()
 				currentProcessed++
 				if bar != nil {
@@ -258,9 +218,22 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		return nil
 	}
 
-	err = p.updatePackageJSON(flags, depsToUpdate)
-	if err != nil {
-		return fmt.Errorf("error updating package.json: %v", err)
+	var depsByWorkspace = make(map[string]dependency.Dependencies)
+	for _, dep := range allDeps {
+		if _, ok := depsByWorkspace[dep.Workspace]; !ok {
+			depsByWorkspace[dep.Workspace] = make(dependency.Dependencies, 0)
+			depsByWorkspace[dep.Workspace] = append(depsByWorkspace[dep.Workspace], dep)
+		}
+		depsByWorkspace[dep.Workspace] = append(depsByWorkspace[dep.Workspace], dep)
+	}
+
+	for workspace, pkg := range p.workspacesPkgs {
+		if deps, ok := depsByWorkspace[workspace]; ok {
+			err = pkg.updatePackageJSON(flags, deps)
+			if err != nil {
+				return fmt.Errorf("error updating package.json: %v", err)
+			}
+		}
 	}
 
 	fmt.Println("All dependencies processed")

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"path"
 
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
@@ -32,6 +31,10 @@ func main() {
 		options = append(options, packagejson.WithPackageManager(flags.PackageManager))
 	}
 
+	if flags.WithWorkspaces {
+		options = append(options, packagejson.WithWorkspaces())
+	}
+
 	pkg, err := packagejson.LoadPackageJSON(
 		options...,
 	)
@@ -40,27 +43,7 @@ func main() {
 		log.Fatalf("Error reading package.json: %v", err)
 	}
 
-	spaces := []string{
-		"",
-	}
-
-	if flags.WithWorkspaces {
-		workspaces := pkg.GetWorkspaces()
-		spaces = append(spaces, workspaces...)
-	}
-
-	for _, workspace := range spaces {
-		workspacePkg, err := packagejson.LoadPackageJSON(
-			packagejson.WithBaseDir(path.Join(flags.BaseDir, workspace)),
-			packagejson.WithPackageManager(pkg.PackageManager.Name),
-		)
-		if err != nil {
-			log.Printf("Warning: Error reading workspace %s: %v", workspace, err)
-			continue
-		}
-
-		if err := workspacePkg.ProcessDependencies(flags); err != nil {
-			log.Printf("Warning: Error processing workspace %s: %v", workspace, err)
-		}
+	if err := pkg.ProcessDependencies(flags); err != nil {
+		log.Printf("Warning: Error processing pkg: %v", err)
 	}
 }

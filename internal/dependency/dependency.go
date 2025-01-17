@@ -162,7 +162,7 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 }
 
 type Dependency struct {
-	*sync.Mutex
+	mx                *sync.Mutex
 	Versions          *Versions
 	PackageName       string
 	CurrentVersion    *semver.Version
@@ -171,6 +171,7 @@ type Dependency struct {
 	NextVersion       *semver.Version
 	HaveToUpdate      bool
 	Env               string
+	Workspace         string
 }
 
 type Dependencies []*Dependency
@@ -245,7 +246,7 @@ func parseNpmrc() (*NpmrcConfig, error) {
 	return config, nil
 }
 
-func NewDependency(packageName, currentVersion, env string) (*Dependency, error) {
+func NewDependency(packageName, currentVersion, env, workspace string) (*Dependency, error) {
 	version, err := semver.NewVersion(utils.GetVersionWithoutPrefix(currentVersion))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing version: %w", err)
@@ -259,6 +260,7 @@ func NewDependency(packageName, currentVersion, env string) (*Dependency, error)
 		NextVersion:       nil,
 		Env:               env,
 		HaveToUpdate:      false,
+		Workspace:         workspace,
 	}, nil
 }
 
