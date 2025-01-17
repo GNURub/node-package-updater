@@ -27,20 +27,21 @@ jobs:
         with:
           go-version: '>=1.20'
 
-      - name: Build
+      - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          mkdir -p dist
           binary_name=npu
+          bin="dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            binary_name=$binary_name.exe
+            bin="dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}.exe"
           fi
-          go build -o "dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}" cmd/npu/main.go
+          go build -ldflags="-s -w" -o "${bin}" cmd/npu/main.go
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/*
         env:
