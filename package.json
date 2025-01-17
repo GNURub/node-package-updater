@@ -1,27 +1,40 @@
 {
-  "name": "test",
-  "packageManager": "bun@1.0.0",
-  "dependencies": {
-    "@angular/material": "19.0.5"
+  "name": "node-package-updater",
+  "version": "1.0.0",
+  "homepage": "https://github.com/GNURub/node-package-updater#readme",
+  "description": "A simple tool to update all your npm dependencies",
+  "bin": {
+    "npu": "scripts/run.js"
   },
-  "devDependencies": {
-    "@influxdata/influxdb-client": "1.35.0",
-    "@nestjs-plugins/nestjs-nats-jetstream-transport": "1.3.5",
-    "@nestjs/common": "10.4.15",
-    "@nestjs/config": "3.3.0",
-    "@nestjs/core": "10.4.15",
-    "@nestjs/event-emitter": "2.1.1",
-    "@nestjs/mapped-types": "2.0.6",
-    "@nestjs/microservices": "10.4.15",
-    "@nestjs/mongoose": "10.1.0",
-    "@nestjs/platform-fastify": "10.4.15",
-    "dayjs": "1.11.13",
-    "jsonwebtoken": "9.0.2",
-    "mongoose": "8.9.5",
-    "nats": "2.29.1",
-    "nestjs-pino": "4.2.0",
-    "pino-http": "10.4.0",
-    "reflect-metadata": "^0.2.2",
-    "xss": "1.0.15"
-  }
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "files": [
+    "scripts"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GNURub/node-package-updater.git"
+  },
+  "keywords": [
+    "cli",
+    "dependency manager",
+    "npm dependencies",
+    "node package updater"
+  ],
+  "author": "Ruben Cid Lara",
+  "license": "MIT"
 }

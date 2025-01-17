@@ -13,10 +13,10 @@ type VersionManager struct {
 	currentVersionStr string
 	currentVersion    *semver.Version
 	currentReq        *semver.Constraints
-	versions          []*semver.Version
+	versions          []*Version
 }
 
-func NewVersionManager(current string, versions []string, flags *cli.Flags) (*VersionManager, error) {
+func NewVersionManager(current string, versions *Versions, flags *cli.Flags) (*VersionManager, error) {
 	currentOnlyVersion := strings.TrimLeft(current, ">=<^~")
 	currentOnlyVersion = strings.TrimSpace(currentOnlyVersion)
 
@@ -33,50 +33,32 @@ func NewVersionManager(current string, versions []string, flags *cli.Flags) (*Ve
 		currentReq, _ = semver.NewConstraint(fmt.Sprintf(">=%s", currentOnlyVersion))
 	}
 
-	var parsedVersions []*semver.Version
-	for _, v := range versions {
-		version, err := semver.NewVersion(v)
-		if err != nil {
-			continue
-		}
-		parsedVersions = append(parsedVersions, version)
-	}
-
 	return &VersionManager{
 		latest:            current == "latest" || current == "*" || current == "",
 		currentVersion:    currentVersion,
 		currentReq:        currentReq,
-		versions:          parsedVersions,
+		versions:          versions.Values(),
 		currentVersionStr: current,
 	}, nil
 }
 
-func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (string, error) {
+func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, error) {
 	var latestVersion *semver.Version
 
 	for _, v := range vm.versions {
-		if (vm.latest || vm.currentReq == nil || vm.currentReq.Check(v)) &&
+		if (vm.latest || vm.currentReq == nil || vm.currentReq.Check(v.Version)) &&
 			(latestVersion == nil || v.GreaterThan(latestVersion)) {
-			latestVersion = v
+			latestVersion = v.Version
 		}
 	}
 
 	if latestVersion == nil {
-		return "", fmt.Errorf("no matching version found")
+		return nil, fmt.Errorf("no matching version found")
 	}
 
 	if vm.currentVersion.Equal(latestVersion) {
-		return "", nil
+		return nil, nil
 	}
 
-	if flags.KeepRangeOperator {
-		prefixes := []string{">=", ">", "^", "~"}
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(vm.currentVersionStr, prefix) {
-				return fmt.Sprintf("%s%s", prefix, latestVersion), nil
-			}
-		}
-	}
-
-	return latestVersion.String(), nil
+	return latestVersion, nil
 }

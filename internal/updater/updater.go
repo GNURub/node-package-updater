@@ -9,7 +9,7 @@ import (
 )
 
 func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed chan bool, currentPackage chan string, cache *cache.Cache) {
-	numWorkers := 10
+	numWorkers := 20
 	if len(deps) < numWorkers {
 		numWorkers = len(deps)
 	}

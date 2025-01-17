@@ -2,16 +2,23 @@
 package packagemanager
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type PackageManager struct {
 	Name      string
 	LockFiles []string
+}
+
+type pnpmWorkspace struct {
+	Packages []string `yaml:"packages"`
 }
 
 var (
@@ -43,6 +50,35 @@ var (
 		LockFiles: []string{"package-lock.json"},
 	}
 )
+
+func (p *PackageManager) GetWorkspacesPaths(dir string, pkgJsonWorkspaces []string) []string {
+
+	if p == Pnpm {
+		ws, err := getWorkspacesFromPnpm(dir)
+
+		if err != nil {
+			pkgJsonWorkspaces = append(pkgJsonWorkspaces, ws...)
+		}
+	}
+
+	var workspacePaths []string
+	for _, workspace := range pkgJsonWorkspaces {
+		matches, err := filepath.Glob(workspace)
+		if err != nil {
+			continue
+		}
+
+		for _, match := range matches {
+			packageJSONPath := filepath.Join(dir, match, "package.json")
+
+			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
+				workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
+			}
+		}
+	}
+
+	return workspacePaths
+}
 
 func Detect(projectPath, manager string) *PackageManager {
 	supportedPackageManagers := []*PackageManager{Bun, Yarn, Pnpm, Npm}
@@ -100,4 +136,31 @@ func (pm *PackageManager) Install() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func getWorkspacesFromPnpm(dir string) ([]string, error) {
+	var workspacePaths []string
+
+	fileContent, err := os.ReadFile(filepath.Join(dir, "pnpm-workspace.yaml"))
+	if err != nil {
+		return nil, fmt.Errorf("error reading pnpm-workspace.yaml: %w", err)
+	}
+
+	var workspaceConfig pnpmWorkspace
+	err = yaml.Unmarshal(fileContent, &workspaceConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing YAML: %w", err)
+	}
+
+	for _, pattern := range workspaceConfig.Packages {
+		isExclusion := strings.HasPrefix(pattern, "!")
+
+		if isExclusion {
+			continue
+		}
+
+		workspacePaths = append(workspacePaths, pattern)
+	}
+
+	return workspacePaths, nil
 }

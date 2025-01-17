@@ -13,8 +13,10 @@ import (
 
 var (
 	baseStyle = lipgloss.NewStyle().
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#63B0B8"))
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("#63B0B8"))
+	getFatStyle     = lipgloss.NewStyle().Margin(0).Foreground(lipgloss.Color("#63B0B8")).Render("↓") // Aseguramos que las flechas no se afecten
+	loseWeightStyle = lipgloss.NewStyle().Margin(0).Foreground(lipgloss.Color("#FF75B7")).Render("↑") // Lo mismo aquí
 )
 
 type sessionState uint
@@ -42,6 +44,18 @@ func tick() tea.Cmd {
 	})
 }
 
+func drawStyleForNewVersion(dep *dependency.Dependency) string {
+	if dep.CurrentVersion.Major() < dep.NextVersion.Major() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")).Render(dep.NextVersion.String())
+	} else if dep.CurrentVersion.Minor() < dep.NextVersion.Minor() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ffa502")).Render(dep.NextVersion.String())
+	} else if dep.CurrentVersion.Patch() < dep.NextVersion.Patch() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")).Render(dep.NextVersion.String())
+	}
+
+	return dep.NextVersion.String()
+}
+
 func (m model) Init() tea.Cmd {
 	return tick()
 }
@@ -52,19 +66,16 @@ func updateVersions(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "left", "h":
+		case "left", "h", "esc":
 			m.state = depsView
 			m.dependencyTable.Focus()
 			m.versionsTable.Blur()
 
-		case " ":
+		case " ", "enter":
 			depCursor := m.dependencyTable.Cursor()
 			versionCursor := m.versionsTable.Cursor()
-			changed := m.dependencies[depCursor].NextVersion != m.dependencies[depCursor].Versions[versionCursor]
-			if changed {
-				m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions[versionCursor]
-				m.selected[depCursor] = struct{}{}
-			}
+			m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions.Values()[versionCursor].Version
+			m.selected[depCursor] = struct{}{}
 			m.state = depsView
 			m.dependencyTable.Focus()
 			m.versionsTable.Blur()
@@ -115,13 +126,55 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case "right", "l":
 			cursor := m.dependencyTable.Cursor()
 			var rows []table.Row
-			for _, v := range m.dependencies[cursor].Versions {
+			cursorVersion := 0
+			currentWeight := uint64(0)
+
+			// Get the current weight
+			for _, v := range m.dependencies[cursor].Versions.Values() {
+				if m.dependencies[cursor].CurrentVersion.Equal(v.Version) {
+					currentWeight = v.Weight
+					break
+				}
+			}
+
+			for i, v := range m.dependencies[cursor].Versions.Values() {
+				strVersion := v.String()
+
+				var s strings.Builder
+
+				// Calculamos la diferencia de peso y mostramos la flecha
+				diff := int64(v.Weight - currentWeight)
+				if diff == 0 {
+					s.WriteString(
+						// Solo aplicamos el estilo a las flechas
+						fmt.Sprintf("  %dKB", diff/1024),
+					)
+				} else if diff > 0 {
+					s.WriteString(
+						// Solo aplicamos el estilo a las flechas
+						fmt.Sprintf("%s %dKB", loseWeightStyle, diff/1024),
+					)
+				} else {
+					s.WriteString(
+						// Lo mismo para la flecha contraria
+						fmt.Sprintf("%s %dKB", getFatStyle, diff/1024),
+					)
+				}
+
 				rows = append(rows, table.Row{
 					m.dependencies[cursor].PackageName,
-					v,
+					strVersion,
+					s.String(),
 				})
+
+				if m.dependencies[cursor].NextVersion.Equal(v.Version) {
+					cursorVersion = i
+				}
 			}
+
 			m.versionsTable.SetRows(rows)
+
+			m.versionsTable.SetCursor(cursorVersion)
 
 			m.state = versionsView
 			m.versionsTable.Focus()
@@ -175,9 +228,10 @@ func (m model) View() string {
 		return ""
 	}
 
+	var footer string
 	if m.state == versionsView {
 		s.WriteString(baseStyle.Render(m.versionsTable.View()) + "\n\n")
-		s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render("\u2190/h: back \u2022 \u2191/\u2193: navigate \u2022 space: select\n"))
+		footer = "\u2190/h: back \u2022 \u2191/\u2193: navigate \u2022 space|enter: select"
 	} else {
 		rows := m.dependencyTable.Rows()
 		for i := range rows {
@@ -186,15 +240,16 @@ func (m model) View() string {
 			} else {
 				rows[i][0] = " "
 			}
-			rows[i][3] = m.dependencies[i].NextVersion
+			rows[i][3] = drawStyleForNewVersion(m.dependencies[i])
 		}
 		m.dependencyTable.SetRows(rows)
 
 		s.WriteString(baseStyle.Render(m.dependencyTable.View()) + "\n\n")
-		s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(
-			"\u2191/\u2193: navigate \u2022 space: select \u2022 enter: select \u2022 ctrl+a: select all \u2022 ctrl+p: select only prod \u2022 ctrl+d: select only dev \u2022 ctrl+u: unselect all \u2022 q: quit\n",
-		))
+
+		footer = "\u2191/\u2193: navigate \u2022 space|enter: select \u2022 ctrl+a: select all \u2022 ctrl+p: select only prod \u2022 ctrl+d: select only dev \u2022 ctrl+u: unselect all"
 	}
+
+	s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(fmt.Sprintf("%s \u2022 q|ctrl+c: exit\n", footer)))
 
 	return s.String()
 }
@@ -204,13 +259,15 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		{Title: "", Width: 2},
 		{Title: "Dependency", Width: 30},
 		{Title: "Current Version", Width: 15},
-		{Title: "New Version", Width: 15},
-		{Title: "Type", Width: 15},
+		{Title: "New Version", Width: 30},
+		{Title: "Environment", Width: 15},
+		{Title: "Workspace", Width: 20},
 	}
 
 	versionsTableColumns := []table.Column{
 		{Title: "Dependency", Width: 15},
 		{Title: "Version", Width: 15},
+		{Title: "Diff weight", Width: 30},
 	}
 
 	var rows []table.Row
@@ -218,9 +275,10 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		rows = append(rows, table.Row{
 			" ",
 			dep.PackageName,
-			dep.CurrentVersion,
-			dep.NextVersion,
+			dep.CurrentVersionStr,
+			drawStyleForNewVersion(dep),
 			dep.Env,
+			dep.Workspace,
 		})
 	}
 
@@ -228,13 +286,13 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		table.WithColumns(dependencyTableColumns),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(7),
+		table.WithHeight(10),
 	)
 
 	versionsTable := table.New(
 		table.WithColumns(versionsTableColumns),
 		table.WithFocused(false),
-		table.WithHeight(7),
+		table.WithHeight(10),
 	)
 
 	defaultTableStyles := table.DefaultStyles()
