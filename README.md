@@ -21,10 +21,17 @@ A CLI application to manage dependencies
 
 Usage:
   npu [flags]
+  npu [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  upgrade     A CLI application to manage dependencies
 
 Flags:
+  -C, --cleanCache              Clean cache
   -c, --config string           Path to config file (default: .npmrc)
-  -d, --directory string        Root directory for package search (default ".")
+  -d, --dir string              Root directory for package search
   -D, --dryRun                  Show what would be updated without making changes
   -e, --exclude strings         Packages to exclude (can be specified multiple times)
   -h, --help                    help for npu
