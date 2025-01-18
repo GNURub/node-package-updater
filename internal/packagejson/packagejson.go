@@ -97,9 +97,12 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				workspacePath,
 				WithPackageManager(pkg.packageJson.Manager),
 			)
+
 			if err != nil {
-				return nil, fmt.Errorf("error loading workspace package.json: %s", workspacePath)
+				fmt.Printf("Error loading workspace package.json: %s\n", workspacePath)
+				continue
 			}
+
 			pkg.workspacesPkgs[workspacePath] = workspacePkg
 		}
 	}
