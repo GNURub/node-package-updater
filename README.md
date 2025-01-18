@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-go install github.com/GNURub/node-package-updater/cmd/npu
+go install github.com/GNURub/node-package-updater@latest
 ```
 
 or
