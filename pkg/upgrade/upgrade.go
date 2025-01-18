@@ -70,6 +70,15 @@ func replaceBinary(newBinary string) error {
 	return nil
 }
 
+func GetNewVersion() string {
+	latestRelease, err := getLatestRelease()
+	if err != nil || !isNewerVersion(latestRelease.TagName) {
+		return ""
+	}
+
+	return latestRelease.TagName
+}
+
 func Upgrade() error {
 	latestRelease, err := getLatestRelease()
 	if err != nil {
