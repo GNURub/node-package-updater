@@ -77,7 +77,7 @@ func Upgrade() error {
 	}
 
 	if !isNewerVersion(latestRelease.TagName) {
-		fmt.Printf("You already have the latest version: %s 🎉", version.Version)
+		fmt.Printf("You already have the latest version: %s 🎉\n", version.Version)
 		return nil
 	}
 
