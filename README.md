@@ -26,7 +26,7 @@ Usage:
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
-  upgrade     A CLI application to manage dependencies
+  upgrade     Upgrade cli to latest version
 
 Flags:
   -C, --cleanCache              Clean cache
