@@ -8,11 +8,13 @@ import (
 )
 
 func main() {
-	newVersion := upgrade.GetNewVersion()
+	go func() {
+		newVersion := upgrade.GetNewVersion()
 
-	if newVersion != "" {
-		fmt.Printf("\nNew version available: %s\nRun `npu upgrade`\n\n", newVersion)
-	}
+		if newVersion != "" {
+			fmt.Printf("\nNew version available: %s\nRun `npu upgrade`\n\n", newVersion)
+		}
+	}()
 
 	if err := npu.Exec(); err != nil {
 		fmt.Println(err)
