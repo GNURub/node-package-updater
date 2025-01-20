@@ -5,6 +5,10 @@
 ## Installation
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/GNURub/node-package-updater/main/install.sh | bash
+```
+
+```bash
 go install github.com/GNURub/node-package-updater@latest
 ```
 
