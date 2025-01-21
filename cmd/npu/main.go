@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/GNURub/node-package-updater/cmd"
 	"github.com/GNURub/node-package-updater/pkg/upgrade"
@@ -15,6 +16,7 @@ func main() {
 	}
 
 	if err := cmd.Exec(); err != nil {
-		fmt.Println(err)
+		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 }
