@@ -52,7 +52,7 @@ jobs:
             OUTPUT="${OUTPUT}.exe"
           fi
           echo "Building binary for $GOOS/$GOARCH..."
-          go build -ldflags="-s -w -X 'github.com/GNURub/node-package-updater/internal/version.Version=${{ env.VERSION }}'" -o "$OUTPUT" main.go
+          go build -ldflags="-s -w -X 'github.com/GNURub/node-package-updater/internal/version.Version=${{ env.VERSION }}'" -o "$OUTPUT" cmd/npu/main.go
           echo "Binary built at $OUTPUT"
 
       - name: Upload Release Asset

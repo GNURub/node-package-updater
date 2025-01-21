@@ -23,13 +23,17 @@ func getLatestRelease() (*Release, error) {
 	url := "https://api.github.com/repos/GNURub/node-package-updater/releases/latest"
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch release info: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
 	var release Release
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse release info: %w", err)
 	}
 
 	return &release, nil
@@ -80,32 +84,38 @@ func GetNewVersion() string {
 }
 
 func Upgrade() error {
+	fmt.Println("🔍 Checking for updates...")
+
 	latestRelease, err := getLatestRelease()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to fetch the latest release: %w", err)
 	}
 
 	if !isNewerVersion(latestRelease.TagName) {
-		fmt.Printf("You already have the latest version: %s 🎉\n", version.Version)
+		fmt.Printf("✅ You already have the latest version: %s 🎉\n", version.Version)
 		return nil
 	}
 
-	fmt.Printf("📦 New release available %s\n", latestRelease.TagName)
+	fmt.Printf("📦 New release available: %s\n", latestRelease.TagName)
 
-	// Cremaos un archivo temporal para descargar el binario
 	dir := os.TempDir()
 	newBinary := fmt.Sprintf("%s/npu", dir)
+	fmt.Printf("⬇️ Downloading binary to: %s\n", newBinary)
+
 	if err := downloadBinary(latestRelease.Assets[0].BrowserDownloadURL, newBinary); err != nil {
-		return err
+		return fmt.Errorf("failed to download the binary: %w", err)
 	}
 
 	if err := os.Chmod(newBinary, 0755); err != nil {
-		return err
+		return fmt.Errorf("failed to set executable permissions: %w", err)
 	}
 
+	// Reemplazar el binario actual
+	fmt.Println("🔄 Replacing the current binary...")
 	if err := replaceBinary(newBinary); err != nil {
-		return err
+		return fmt.Errorf("failed to replace the binary: %w", err)
 	}
 
+	fmt.Println("🎉 Upgrade completed successfully!")
 	return nil
 }

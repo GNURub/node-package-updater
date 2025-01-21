@@ -1,15 +1,21 @@
-package npu
+package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/GNURub/node-package-updater/pkg/upgrade"
 	"github.com/spf13/cobra"
 )
 
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "A CLI application to manage dependencies",
+	Short: "Upgrade to the latest version of the CLI",
 	Run: func(cmd *cobra.Command, args []string) {
-		upgrade.Upgrade()
+		if err := upgrade.Upgrade(); err != nil {
+			fmt.Printf("❌ Upgrade failed: %v\n", err)
+			os.Exit(1)
+		}
 	},
 }
 

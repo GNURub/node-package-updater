@@ -9,7 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/GNURub/node-package-updater/main/in
 ```
 
 ```bash
-go install github.com/GNURub/node-package-updater@latest
+go install github.com/GNURub/node-package-updater/cmd/npu@latest
 ```
 
 or

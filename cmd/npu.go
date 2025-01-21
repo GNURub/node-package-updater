@@ -1,4 +1,4 @@
-package npu
+package cmd
 
 import (
 	"fmt"
