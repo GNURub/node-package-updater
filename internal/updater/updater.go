@@ -9,7 +9,7 @@ import (
 )
 
 func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed chan bool, currentPackage chan string, cache *cache.Cache) {
-	numWorkers := 20
+	numWorkers := 10
 	if len(deps) < numWorkers {
 		numWorkers = len(deps)
 	}
@@ -37,6 +37,8 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		for _, dep := range deps {
 			jobs <- dep
 		}
+
+		close(jobs)
 	}()
 
 	wg.Wait()

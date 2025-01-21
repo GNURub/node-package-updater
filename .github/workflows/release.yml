@@ -20,11 +20,20 @@ jobs:
             goos: windows
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        id: extract_version
+        run: |
+          # Extraer la versión desde el tag sin prefijo "v"
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          if [[ ! "$TAG_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Tag '$TAG_NAME' is not a valid semantic version (X.Y.Z)." >&2
+            exit 1
+          fi
+          echo "VERSION=$TAG_NAME" >> $GITHUB_ENV
+          echo "Extracted version: $TAG_NAME"
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -37,12 +46,14 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          binary_name=npu
-          bin="dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          BINARY_NAME=npu
+          OUTPUT="dist/${BINARY_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            bin="dist/${binary_name}_${{ matrix.goos }}_${{ matrix.goarch }}.exe"
+            OUTPUT="${OUTPUT}.exe"
           fi
-          go build -ldflags="-s -w -X 'github.com/GNURub/node-package-updater/internal/version.Version=${{ env.VERSION }}'" -o "${bin}" main.go
+          echo "Building binary for $GOOS/$GOARCH..."
+          go build -ldflags="-s -w -X 'github.com/GNURub/node-package-updater/internal/version.Version=${{ env.VERSION }}'" -o "$OUTPUT" main.go
+          echo "Binary built at $OUTPUT"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2

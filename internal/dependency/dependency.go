@@ -267,47 +267,59 @@ func NewDependency(packageName, currentVersion, env, workspace string) (*Depende
 	}, nil
 }
 
-func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) (err error) {
+func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) error {
 	var latest *semver.Version
 	var etag string
 	versions := NewVersions()
 	reqToNpm := true
 
-	versions.Restore(d.PackageName, cache)
-	cachedEtag, err := cache.Get(d.PackageName + "-etag")
-	if err == nil {
-		etag = string(cachedEtag)
-	}
+	// Intentar restaurar datos de la caché
+	if err := versions.Restore(d.PackageName, cache); err != nil {
+		fmt.Printf("[DEBUG] No cache found for package: %s. Fetching from registry...\n", d.PackageName)
+	} else {
+		// Intentar obtener el ETag desde la caché
+		cachedEtag, err := cache.Get(d.PackageName + "-etag")
+		if err == nil {
+			etag = string(cachedEtag)
+		}
 
-	if etag != "" {
-		remoteEtag, _ := headEtagFromRegistry(flags.Registry, d.PackageName)
-		reqToNpm = etag != remoteEtag
+		if etag != "" {
+			remoteEtag, _ := headEtagFromRegistry(flags.Registry, d.PackageName)
+			reqToNpm = etag != remoteEtag
+		}
 	}
 
 	if reqToNpm {
-		etag, latest, versions, err = getVersionsFromRegistry(flags.Registry, d.PackageName)
-		if err != nil {
-			return fmt.Errorf("error fetching versions from npm registry: %w", err)
+		var fetchErr error
+		etag, latest, versions, fetchErr = getVersionsFromRegistry(flags.Registry, d.PackageName)
+		if fetchErr != nil {
+			return fmt.Errorf("[ERROR] Failed to fetch versions from registry for package '%s': %w", d.PackageName, fetchErr)
 		}
 
-		cache.Set(d.PackageName+"-etag", []byte(etag))
-		versions.Save(d.PackageName, cache)
+		// Guardar los datos en la caché
+		if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err != nil {
+			fmt.Printf("[WARNING] Failed to cache ETag for package '%s': %v\n", d.PackageName, err)
+		}
+		if err := versions.Save(d.PackageName, cache); err != nil {
+			fmt.Printf("[WARNING] Failed to cache versions for package '%s': %v\n", d.PackageName, err)
+		}
 	}
 
 	d.Versions = versions
 
 	vm, err := NewVersionManager(d.CurrentVersionStr, versions, flags)
 	if err != nil {
-		return fmt.Errorf("error creating version manager: %w", err)
+		return fmt.Errorf("[ERROR] Failed to create version manager for package '%s': %w", d.PackageName, err)
 	}
 
 	newVersion, err := vm.GetUpdatedVersion(flags)
 	if err != nil {
-		return fmt.Errorf("error getting updated version: %w", err)
+		return fmt.Errorf("[ERROR] Failed to determine updated version for package '%s': %w", d.PackageName, err)
 	}
 
 	if newVersion == nil {
-		return fmt.Errorf("no new version found")
+		fmt.Printf("[INFO] No updates available for package '%s'\n", d.PackageName)
+		return nil
 	}
 
 	d.NextVersion = newVersion

@@ -256,19 +256,18 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 }
 
 func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency.Dependencies) error {
-	// Leer el archivo original
+	var orderedJSON orderedmap.OrderedMap
+	orderedJSON.SetEscapeHTML(false)
 	originalData, err := os.ReadFile(p.packageFilePath)
 	if err != nil {
-		return fmt.Errorf("error reading package.json: %v", err)
+		return fmt.Errorf("[ERROR] Unable to read package.json: %w", err)
 	}
-
-	orderedJSON := orderedmap.New()
-	orderedJSON.SetEscapeHTML(false)
 
 	if err := json.Unmarshal(originalData, &orderedJSON); err != nil {
-		return fmt.Errorf("error unmarshalling package.json: %v", err)
+		return fmt.Errorf("[ERROR] Failed to parse package.json: %w", err)
 	}
 
+	// Mapear secciones del JSON con las dependencias actualizadas
 	depSections := map[string]string{
 		"prod": "dependencies",
 		"dev":  "devDependencies",
@@ -276,37 +275,44 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	for _, dep := range updatedDeps {
-		if depsValue, ok := orderedJSON.Get(depSections[dep.Env]); ok {
-			if depsMap, ok := depsValue.(orderedmap.OrderedMap); ok {
-				currentVersion := dep.CurrentVersionStr
-				updatedVersion := dep.NextVersion.String()
+		section, ok := depSections[dep.Env]
+		if !ok {
+			continue
+		}
 
-				if flags.KeepRangeOperator {
-					updatedVersion = fmt.Sprintf("%s%s", utils.GetPrefix(currentVersion), updatedVersion)
-				}
+		depsMap, ok := orderedJSON.Get(section)
+		if !ok {
+			continue
+		}
 
-				depsMap.Set(dep.PackageName, updatedVersion)
+		// Actualizar las versiones en el mapa de dependencias
+		if depsMap, ok := depsMap.(orderedmap.OrderedMap); ok {
+			currentVersion := dep.CurrentVersionStr
+			updatedVersion := dep.NextVersion.String()
+
+			if flags.KeepRangeOperator {
+				updatedVersion = fmt.Sprintf("%s%s", utils.GetPrefix(currentVersion), updatedVersion)
 			}
+
+			depsMap.Set(dep.PackageName, updatedVersion)
 		}
 	}
 
 	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
+	encoder := json.NewEncoder(&buf)
+	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 
-	// Configurar el encoder para que no escape caracteres HTML
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(orderedJSON); err != nil {
-		return fmt.Errorf("error serializing updated package.json: %v", err)
+	if err := encoder.Encode(orderedJSON); err != nil {
+		return fmt.Errorf("[ERROR] Failed to serialize updated package.json: %w", err)
 	}
 
 	jsonBytes := bytes.TrimRight(buf.Bytes(), "\n")
 
-	// Escribir el archivo actualizado
 	if err := os.WriteFile(p.packageFilePath, jsonBytes, 0644); err != nil {
-		return fmt.Errorf("error writing updated package.json: %v", err)
+		return fmt.Errorf("[ERROR] Failed to write updated package.json: %w", err)
 	}
 
+	fmt.Printf("[INFO] Successfully updated package.json at %s\n", p.packageFilePath)
 	return nil
 }
