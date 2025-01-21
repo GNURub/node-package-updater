@@ -37,8 +37,6 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		for _, dep := range deps {
 			jobs <- dep
 		}
-
-		close(jobs)
 	}()
 
 	wg.Wait()

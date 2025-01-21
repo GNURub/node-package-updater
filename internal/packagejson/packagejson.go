@@ -99,7 +99,6 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 			)
 
 			if err != nil {
-				fmt.Printf("Error loading workspace package.json: %s\n", workspacePath)
 				continue
 			}
 
@@ -129,7 +128,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		for name, version := range pkg.packageJson.Dependencies {
 			d, err := dependency.NewDependency(name, version, "prod", workspace)
 			if err != nil {
-				fmt.Printf("Error creating dependency %s: %v\n", name, err)
 				continue
 			}
 			allDeps = append(allDeps, d)
@@ -139,7 +137,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 			for name, version := range p.packageJson.DevDependencies {
 				d, err := dependency.NewDependency(name, version, "dev", workspace)
 				if err != nil {
-					fmt.Printf("Error creating dependency %s: %v\n", name, err)
 					continue
 				}
 				allDeps = append(allDeps, d)
@@ -149,7 +146,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 				for name, version := range p.packageJson.PeerDependencies {
 					d, err := dependency.NewDependency(name, version, "peer", workspace)
 					if err != nil {
-						fmt.Printf("Error creating dependency %s: %v\n", name, err)
 						continue
 					}
 					allDeps = append(allDeps, d)
@@ -246,11 +242,11 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
-	fmt.Println("🎉! All dependencies updated successfully!")
-
 	if !flags.NoInstall {
 		p.PackageManager.Install()
 	}
+
+	fmt.Println("🎉! All dependencies updated successfully!")
 
 	return nil
 }
@@ -313,6 +309,5 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 		return fmt.Errorf("[ERROR] Failed to write updated package.json: %w", err)
 	}
 
-	fmt.Printf("[INFO] Successfully updated package.json at %s\n", p.packageFilePath)
 	return nil
 }

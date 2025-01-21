@@ -274,9 +274,7 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) error
 	reqToNpm := true
 
 	// Intentar restaurar datos de la caché
-	if err := versions.Restore(d.PackageName, cache); err != nil {
-		fmt.Printf("[DEBUG] No cache found for package: %s. Fetching from registry...\n", d.PackageName)
-	} else {
+	if err := versions.Restore(d.PackageName, cache); err == nil {
 		// Intentar obtener el ETag desde la caché
 		cachedEtag, err := cache.Get(d.PackageName + "-etag")
 		if err == nil {
@@ -296,13 +294,8 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) error
 			return fmt.Errorf("[ERROR] Failed to fetch versions from registry for package '%s': %w", d.PackageName, fetchErr)
 		}
 
-		// Guardar los datos en la caché
-		if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err != nil {
-			fmt.Printf("[WARNING] Failed to cache ETag for package '%s': %v\n", d.PackageName, err)
-		}
-		if err := versions.Save(d.PackageName, cache); err != nil {
-			fmt.Printf("[WARNING] Failed to cache versions for package '%s': %v\n", d.PackageName, err)
-		}
+		cache.Set(d.PackageName+"-etag", []byte(etag))
+		versions.Save(d.PackageName, cache)
 	}
 
 	d.Versions = versions
@@ -318,7 +311,6 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) error
 	}
 
 	if newVersion == nil {
-		fmt.Printf("[INFO] No updates available for package '%s'\n", d.PackageName)
 		return nil
 	}
 
