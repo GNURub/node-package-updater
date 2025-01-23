@@ -14,8 +14,7 @@ import (
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
-	"github.com/GNURub/node-package-updater/internal/utils"
-	"github.com/Masterminds/semver/v3"
+	"github.com/GNURub/node-package-updater/internal/semver"
 	"github.com/iancoleman/orderedmap"
 	"github.com/valyala/fasthttp"
 )
@@ -63,11 +62,11 @@ func NewVersions() *Versions {
 
 func (v *Versions) SetVersions(versions []*Version) *Versions {
 	sort.Slice(versions, func(i, j int) bool {
-		return versions[i].GreaterThan(versions[j].Version)
+		return versions[i].Compare(versions[j].Version) > 0
 	})
 
 	for _, version := range versions {
-		v.OrderedMap.Set(version.Original(), version)
+		v.OrderedMap.Set(version.Version.String(), version)
 	}
 
 	return v
@@ -103,7 +102,7 @@ func (v *Versions) Len() int {
 
 // implement sort.Interface
 func (v *Versions) Less(i, j int) bool {
-	return v.Values()[i].LessThan(v.Values()[j].Version)
+	return v.Values()[i].Compare(v.Values()[j].Version) < 0
 }
 
 func (v *Versions) Swap(i, j int) {
@@ -115,7 +114,7 @@ func (versions *Versions) Save(pkgName string, cache *cache.Cache) error {
 	var m = make(map[string]versionJson)
 
 	for _, version := range versions.Values() {
-		m[version.Original()] = versionJson{
+		m[version.String()] = versionJson{
 			Version: version.VersionStr,
 			Weight:  version.Weight,
 		}
@@ -155,7 +154,7 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 
 	for _, version := range m {
 		vs = append(vs, &Version{
-			Version:    semver.MustParse(version.Version),
+			Version:    semver.NewSemver(version.Version),
 			VersionStr: version.Version,
 			Weight:     version.Weight,
 		})
@@ -167,15 +166,14 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 }
 
 type Dependency struct {
-	Versions          *Versions
-	PackageName       string
-	CurrentVersion    *semver.Version
-	CurrentVersionStr string
-	LatestVersion     *semver.Version
-	NextVersion       *semver.Version
-	HaveToUpdate      bool
-	Env               string
-	Workspace         string
+	Versions       *Versions
+	PackageName    string
+	CurrentVersion *semver.Version
+	LatestVersion  *semver.Version
+	NextVersion    *semver.Version
+	HaveToUpdate   bool
+	Env            string
+	Workspace      string
 }
 
 type Dependencies []*Dependency
@@ -251,20 +249,20 @@ func parseNpmrc() (*NpmrcConfig, error) {
 }
 
 func NewDependency(packageName, currentVersion, env, workspace string) (*Dependency, error) {
-	version, err := semver.NewVersion(utils.GetVersionWithoutPrefix(currentVersion))
-	if err != nil {
-		return nil, fmt.Errorf("error parsing version: %w", err)
+	version := semver.NewSemver(currentVersion)
+
+	if !version.IsValid() {
+		return nil, fmt.Errorf("invalid version: %s", currentVersion)
 	}
 
 	return &Dependency{
-		PackageName:       packageName,
-		CurrentVersionStr: currentVersion,
-		CurrentVersion:    version,
-		LatestVersion:     nil,
-		NextVersion:       nil,
-		Env:               env,
-		HaveToUpdate:      false,
-		Workspace:         workspace,
+		PackageName:    packageName,
+		CurrentVersion: version,
+		LatestVersion:  nil,
+		NextVersion:    nil,
+		Env:            env,
+		HaveToUpdate:   false,
+		Workspace:      workspace,
 	}, nil
 }
 
@@ -301,7 +299,7 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 
 	d.Versions = versions
 
-	vm, err := NewVersionManager(d.CurrentVersionStr, versions, flags)
+	vm, err := NewVersionManager(d.CurrentVersion, versions, flags)
 	if err != nil {
 		return fmt.Errorf("[ERROR] Failed to create version manager for package '%s': %w", d.PackageName, err)
 	}
@@ -377,14 +375,14 @@ func getVersionsFromRegistry(registry, packageName string) (string, *semver.Vers
 		}
 
 		versions = append(versions, &Version{
-			Version:    semver.MustParse(version),
+			Version:    semver.NewSemver(version),
 			VersionStr: version,
 			Weight:     v.Dist.UnpackedSize,
 		})
 	}
 	var latestVersion *semver.Version
 	if latest, ok := npmResp.DistTags["latest"]; ok {
-		latestVersion = semver.MustParse(latest)
+		latestVersion = semver.NewSemver(latest)
 	}
 
 	return etag, latestVersion, NewVersions().SetVersions(versions), nil

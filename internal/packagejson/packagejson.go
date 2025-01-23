@@ -16,7 +16,6 @@ import (
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/ui"
 	"github.com/GNURub/node-package-updater/internal/updater"
-	"github.com/GNURub/node-package-updater/internal/utils"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/iancoleman/orderedmap"
 )
@@ -280,11 +279,10 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 
 		// Actualizar las versiones en el mapa de dependencias
 		if depsMap, ok := depsMap.(orderedmap.OrderedMap); ok {
-			currentVersion := dep.CurrentVersionStr
 			updatedVersion := dep.NextVersion.String()
 
 			if flags.KeepRangeOperator {
-				updatedVersion = fmt.Sprintf("%s%s", utils.GetPrefix(currentVersion), updatedVersion)
+				updatedVersion = fmt.Sprintf("%s%s", dep.CurrentVersion.Prefix(), updatedVersion)
 			}
 
 			depsMap.Set(dep.PackageName, updatedVersion)

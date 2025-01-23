@@ -4,7 +4,6 @@ go 1.23.1
 
 require (
 	git.mills.io/prologic/bitcask v1.0.2
-	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.2.4
 	github.com/charmbracelet/lipgloss v1.0.0

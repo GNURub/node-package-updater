@@ -20,14 +20,71 @@ type Version struct {
 	isValid    bool
 }
 
+// ByVersion implements [sort.Interface] for sorting semantic version strings.
+type ByVersion []*Version
+
 func NewSemver(version string) *Version {
 	pv, isValid := parse(version)
 	pv.isValid = isValid
 	return &pv
 }
 
+func (v *Version) SetPrefix(prefix string) {
+	v.prefix = prefix
+}
+
+func ToVersionSlice(versions []string) []*Version {
+	vs := make([]*Version, len(versions))
+	for i, version := range versions {
+		vs[i] = NewSemver(version)
+	}
+
+	return vs
+}
+
+func (vs ByVersion) Len() int      { return len(vs) }
+func (vs ByVersion) Swap(i, j int) { vs[i], vs[j] = vs[j], vs[i] }
+func (vs ByVersion) Less(i, j int) bool {
+	cmp := vs[i].Compare(vs[j])
+	if cmp != 0 {
+		return cmp < 0
+	}
+	return vs[i].version < vs[j].version
+}
+
 func (v *Version) IsValid() bool {
 	return v.isValid
+}
+
+// Check determines if the given version matches the prefix requirements of the current version
+func (v *Version) Check(w *Version) bool {
+	// If no prefix, versions must be exactly equal
+	if v.prefix == "" {
+		return v.Compare(w) == 0
+	}
+
+	switch v.prefix {
+	case ">=":
+		return v.Compare(w) <= 0
+	case ">":
+		return v.Compare(w) < 0
+	case "^":
+		return v.major == w.major && v.Compare(w) <= 0
+	case "~":
+		return v.major == w.major && v.minor == w.minor && v.Compare(w) <= 0
+	case "<=":
+		return v.Compare(w) >= 0
+	case "<":
+		return v.Compare(w) > 0
+	case "=":
+		return v.Compare(w) == 0
+	default:
+		return false
+	}
+}
+
+func (v *Version) Prefix() string {
+	return v.prefix
 }
 
 func (v *Version) Canonical() string {
@@ -41,6 +98,28 @@ func (v *Version) Canonical() string {
 		return v.version + v.short
 	}
 	return v.version
+}
+
+func (v *Version) Major() string {
+	if !v.isValid {
+		return ""
+	}
+	return v.major
+}
+
+func (v *Version) Minor() string {
+	if !v.isValid {
+		return ""
+	}
+	return v.minor
+}
+
+func (v *Version) Patch() string {
+	if !v.isValid {
+		return ""
+	}
+
+	return v.patch
 }
 
 func (v *Version) MajorMinor() string {
@@ -102,24 +181,7 @@ func (v *Version) Compare(w *Version) int {
 	return comparePrerelease(v.prerelease, w.prerelease)
 }
 
-// ByVersion implements [sort.Interface] for sorting semantic version strings.
-type ByVersion []*Version
-
-func (vs ByVersion) Len() int      { return len(vs) }
-func (vs ByVersion) Swap(i, j int) { vs[i], vs[j] = vs[j], vs[i] }
-func (vs ByVersion) Less(i, j int) bool {
-	cmp := vs[i].Compare(vs[j])
-	if cmp != 0 {
-		return cmp < 0
-	}
-	return vs[i].version < vs[j].version
-}
-
 func (v *Version) String() string {
-	return v.version
-}
-
-func (v *Version) StringWithPrefix() string {
 	return fmt.Sprintf("%s%s", v.prefix, v.version)
 }
 

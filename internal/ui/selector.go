@@ -131,7 +131,7 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 			// Get the current weight
 			for _, v := range m.dependencies[cursor].Versions.Values() {
-				if m.dependencies[cursor].CurrentVersion.Equal(v.Version) {
+				if m.dependencies[cursor].CurrentVersion.Compare(v.Version) == 0 {
 					currentWeight = v.Weight
 					break
 				}
@@ -167,7 +167,7 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					s.String(),
 				})
 
-				if m.dependencies[cursor].NextVersion.Equal(v.Version) {
+				if m.dependencies[cursor].NextVersion.Compare(v.Version) == 0 {
 					cursorVersion = i
 				}
 			}
@@ -275,7 +275,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		rows = append(rows, table.Row{
 			" ",
 			dep.PackageName,
-			dep.CurrentVersionStr,
+			dep.CurrentVersion.String(),
 			drawStyleForNewVersion(dep),
 			dep.Env,
 			dep.Workspace,
