@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"runtime"
 	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
@@ -9,35 +10,30 @@ import (
 )
 
 func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed chan bool, currentPackage chan string, cache *cache.Cache) {
-	numWorkers := 10
+	numCPUs := runtime.NumCPU()
+	numWorkers := numCPUs * 2
 	if len(deps) < numWorkers {
 		numWorkers = len(deps)
 	}
 
-	jobs := make(chan *dependency.Dependency, len(deps))
+	sem := make(chan struct{}, numWorkers)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numWorkers; i++ {
+	for _, dep := range deps {
+		sem <- struct{}{}
 		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
-			for dep := range jobs {
-				currentPackage <- dep.PackageName
+		go func(dep *dependency.Dependency) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
 
-				dep.FetchNewVersion(flags, cache)
+			currentPackage <- dep.PackageName
+			dep.FetchNewVersion(flags, cache)
 
-				processed <- true
-			}
-		}()
+			processed <- true
+		}(dep)
 	}
-
-	go func() {
-		defer close(jobs)
-		for _, dep := range deps {
-			jobs <- dep
-		}
-	}()
-
 	wg.Wait()
 }

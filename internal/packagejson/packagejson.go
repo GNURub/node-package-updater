@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
@@ -28,6 +29,7 @@ type PackageJSON struct {
 	PackageManager    *packagemanager.PackageManager
 	workspacesPkgs    map[string]*PackageJSON
 	processWorkspaces bool
+	cache             *cache.Cache
 	packageJson       struct {
 		Manager          string            `json:"packageManager,omitempty"`
 		Dependencies     map[string]string `json:"dependencies,omitempty"`
@@ -40,6 +42,14 @@ type PackageJSON struct {
 func WithPackageManager(manager string) Option {
 	return func(s *PackageJSON) error {
 		s.packageJson.Manager = manager
+
+		return nil
+	}
+}
+
+func WithCache(cache *cache.Cache) Option {
+	return func(s *PackageJSON) error {
+		s.cache = cache
 
 		return nil
 	}
@@ -68,7 +78,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	fullPackageJSONPath := path.Join(pkg.Dir, "package.json")
 	data, err := os.ReadFile(fullPackageJSONPath)
 	if err != nil {
-		return nil, errors.New("no package.json found")
+		return nil, fmt.Errorf("no package.json found on directory: %s", filepath.Dir(fullPackageJSONPath))
 	}
 
 	pkg.packageFilePath = fullPackageJSONPath
@@ -96,6 +106,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 			workspacePkg, err := LoadPackageJSON(
 				workspacePath,
 				WithPackageManager(pkg.packageJson.Manager),
+				WithCache(pkg.cache),
 			)
 
 			if err != nil {
@@ -112,16 +123,6 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 }
 
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
-	cache, err := cache.NewCache()
-	if err != nil {
-		return errors.New("error creating cache")
-	}
-	defer cache.Close()
-
-	if flags.CleanCache {
-		cache.Clean()
-	}
-
 	var allDeps dependency.Dependencies
 
 	for workspace, pkg := range p.workspacesPkgs {
@@ -172,7 +173,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	wg.Add(totalDeps)
 
 	go func() {
-		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, cache)
+		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, p.cache)
 	}()
 
 	go func() {
@@ -235,7 +236,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	for workspace, pkg := range p.workspacesPkgs {
 		if deps, ok := depsByWorkspace[workspace]; ok {
-			err = pkg.updatePackageJSON(flags, deps)
+			err := pkg.updatePackageJSON(flags, deps)
 			if err != nil {
 				return fmt.Errorf("error updating package.json: %v", err)
 			}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"sync"
 
 	"git.mills.io/prologic/bitcask"
 )
@@ -11,24 +12,32 @@ import (
 const CACHE_APP_DIR = ".npu-cache"
 
 type Cache struct {
-	db *bitcask.Bitcask
+	db       *bitcask.Bitcask
+	memCache sync.Map
 }
 
 func NewCache() (*Cache, error) {
 	cacheDir := path.Join(os.TempDir(), CACHE_APP_DIR)
 	ensureDir(cacheDir)
 
-	// 300MB
-	maxDatafileSize := 1024 * 1024 * 300
-	db, err := bitcask.Open(cacheDir, bitcask.WithMaxDatafileSize(maxDatafileSize))
+	maxDatafileSize := 1024 * 1024 * 800
+	maxKeySize := 1024 * 1024 * 5
+	maxValueSize := 1024 * 1024 * 15
+	db, err := bitcask.Open(
+		cacheDir,
+		bitcask.WithMaxDatafileSize(maxDatafileSize),
+		bitcask.WithMaxKeySize(uint32(maxKeySize)),
+		bitcask.WithMaxValueSize(uint64(maxValueSize)),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Cache{db}, nil
+	return &Cache{db: db}, nil
 }
 
 func (cache *Cache) Clean() error {
+	cache.memCache = sync.Map{}
 	return cache.db.DeleteAll()
 }
 
@@ -37,18 +46,35 @@ func (cache *Cache) Close() error {
 }
 
 func (cache *Cache) Has(key string) bool {
+	_, found := cache.memCache.Load(key)
+	if found {
+		return true
+	}
 	return cache.db.Has([]byte(key))
 }
 
 func (cache *Cache) Get(key string) ([]byte, error) {
+	if value, found := cache.memCache.Load(key); found {
+		return value.([]byte), nil
+	}
+
 	if !cache.db.Has([]byte(key)) {
 		return nil, errors.New("key not found")
 	}
 
-	return cache.db.Get([]byte(key))
+	data, err := cache.db.Get([]byte(key))
+	if err != nil {
+		return nil, err
+	}
+
+	cache.memCache.Store(key, data)
+
+	return data, nil
 }
 
 func (cache *Cache) Set(key string, data []byte) error {
+	cache.memCache.Store(key, data)
+
 	return cache.db.Put([]byte(key), data)
 }
 
@@ -59,6 +85,5 @@ func ensureDir(dirName string) error {
 			return err
 		}
 	}
-
 	return nil
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
 	"github.com/GNURub/node-package-updater/internal/styles"
@@ -14,6 +15,7 @@ var rootCmd = &cobra.Command{
 	Use:   "npu",
 	Short: "A CLI application to manage dependencies",
 	Long:  "A CLI application to manage dependencies",
+	Args:  cobra.MaximumNArgs(1),
 }
 
 func init() {
@@ -51,6 +53,12 @@ func Exec() error {
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
 		options := []packagejson.Option{}
 
+		baseDir := flags.BaseDir
+
+		if len(args) > 0 {
+			baseDir = args[0]
+		}
+
 		if flags.PackageManager != "" {
 			options = append(options, packagejson.WithPackageManager(flags.PackageManager))
 		}
@@ -59,8 +67,21 @@ func Exec() error {
 			options = append(options, packagejson.EnableWorkspaces())
 		}
 
+		cache, err := cache.NewCache()
+		if err != nil {
+			fmt.Println(styles.ErrorStyle.Render(err.Error()))
+			return
+		}
+		defer cache.Close()
+
+		if flags.CleanCache {
+			cache.Clean()
+		}
+
+		options = append(options, packagejson.WithCache(cache))
+
 		pkg, err := packagejson.LoadPackageJSON(
-			flags.BaseDir,
+			baseDir,
 			options...,
 		)
 
