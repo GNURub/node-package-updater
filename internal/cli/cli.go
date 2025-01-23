@@ -22,7 +22,6 @@ type Flags struct {
 	PeerDependencies  bool
 	Production        bool
 	Registry          string
-	ShowVersion       bool
 	Timeout           int
 	Verbose           bool
 	WithWorkspaces    bool

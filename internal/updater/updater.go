@@ -1,8 +1,10 @@
 package updater
 
 import (
+	"context"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -29,8 +31,11 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 				wg.Done()
 			}()
 
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(flags.Timeout))
+			defer cancel()
+
 			currentPackage <- dep.PackageName
-			dep.FetchNewVersion(flags, cache)
+			dep.FetchNewVersion(ctx, flags, cache)
 
 			processed <- true
 		}(dep)

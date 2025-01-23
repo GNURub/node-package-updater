@@ -2,6 +2,7 @@ package dependency
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -267,7 +268,7 @@ func NewDependency(packageName, currentVersion, env, workspace string) (*Depende
 	}, nil
 }
 
-func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) error {
+func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cache *cache.Cache) error {
 	var latest *semver.Version
 	var etag string
 	versions := NewVersions()
@@ -316,6 +317,8 @@ func (d *Dependency) FetchNewVersion(flags *cli.Flags, cache *cache.Cache) error
 
 	d.NextVersion = newVersion
 	d.LatestVersion = latest
+
+	ctx.Done()
 
 	return nil
 }

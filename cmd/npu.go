@@ -38,7 +38,6 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.NoInstall, "noInstall", "n", false, "Do not install packages after updating")
 	rootCmd.Flags().BoolVarP(&flags.NoInteractive, "nonInteractive", "x", false, "Non-interactive mode")
 	rootCmd.Flags().BoolVarP(&flags.DryRun, "dryRun", "D", false, "Show what would be updated without making changes")
-	rootCmd.Flags().BoolVarP(&flags.ShowVersion, "version", "v", false, "Show version")
 	rootCmd.Flags().BoolVarP(&flags.Verbose, "verbose", "V", false, "Show detailed output")
 	rootCmd.Flags().StringVarP(&flags.PackageManager, "packageManager", "M", "", "Package manager to use (npm, yarn, pnpm, bun)")
 	rootCmd.Flags().StringVarP(&flags.LogLevel, "log", "l", "info", "Log level (debug, info, warn, error)")

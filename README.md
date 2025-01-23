@@ -30,8 +30,8 @@ Usage:
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
-  upgrade     Upgrade cli to latest version
-  version     Show version
+  upgrade     Upgrade to the latest version of the CLI
+  version     Print the version number of NPU
 
 Flags:
   -C, --cleanCache              Clean cache
@@ -54,6 +54,17 @@ Flags:
   -s, --semanticVersion         Maintain semver satisfaction
   -t, --timeout int             Timeout in seconds for each package update (default 30)
   -V, --verbose                 Show detailed output
-  -v, --version                 Show version
   -w, --workspaces              Include workspace repositories
 ```
+
+## Benchmarks
+
+| Command     |      Mean [s] | Min [s] | Max [s] |    Relative |
+| :---------- | ------------: | ------: | ------: | ----------: |
+| `npu -x -n` | 1.370 ± 0.410 |   1.058 |   2.059 |        1.00 |
+| `ncu -u`    | 6.876 ± 1.245 |   5.462 |   7.926 | 5.02 ± 1.76 |
+
+### Summary
+
+npu -x -n ran
+5.02 ± 1.76 times faster than ncu -u
