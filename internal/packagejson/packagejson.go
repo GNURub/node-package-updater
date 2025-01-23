@@ -243,10 +243,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
-	if !flags.NoInstall {
-		p.PackageManager.Install()
-	}
-
 	fmt.Println("🎉! All dependencies updated successfully!")
 
 	return nil
@@ -306,8 +302,17 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 
 	jsonBytes := bytes.TrimRight(buf.Bytes(), "\n")
 
+	if flags.DryRun {
+		fmt.Println(string(jsonBytes))
+		return nil
+	}
+
 	if err := os.WriteFile(p.packageFilePath, jsonBytes, 0644); err != nil {
 		return fmt.Errorf("[ERROR] Failed to write updated package.json: %w", err)
+	}
+
+	if !flags.NoInstall {
+		return p.PackageManager.Install()
 	}
 
 	return nil

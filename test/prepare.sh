@@ -1,3 +1,6 @@
+#!/bin/bash
+
+cat << EOF > ./package.json
 {
   "name": "test",
   "version": "0.0.0",
@@ -145,3 +148,4 @@
     "tslib": "^2.8.1"
   }
 }
+EOF
