@@ -45,9 +45,17 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, 
 			continue
 		}
 
-		// Si estamos buscando una versión menor, nos aseguramos de que sea de la misma major
+		// Si estamos buscando una versión mayor, permitimos actualizaciones de major, minor o patch
+		if !flags.Minor && !flags.Patch {
+			if latestVersion == nil || v.Compare(latestVersion) > 0 {
+				latestVersion = v.Version
+			}
+			continue
+		}
+
+		// Si estamos buscando una versión menor, permitimos actualizaciones de minor o patch
 		if flags.Minor {
-			if vm.currentVersion.Major() == v.Version.Major() && vm.currentVersion.Minor() < v.Version.Minor() {
+			if vm.currentVersion.Major() == v.Version.Major() {
 				if latestVersion == nil || v.Compare(latestVersion) > 0 {
 					latestVersion = v.Version
 				}
@@ -55,29 +63,14 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*semver.Version, 
 			continue
 		}
 
-		// Si estamos buscando una versión de parche, nos aseguramos de que sea de la misma major y minor
+		// Si estamos buscando una versión de parche, solo permitimos actualizaciones de patch
 		if flags.Patch {
-			if vm.currentVersion.Major() == v.Version.Major() && vm.currentVersion.Minor() == v.Version.Minor() && vm.currentVersion.Patch() < v.Version.Patch() {
+			if vm.currentVersion.Major() == v.Version.Major() && vm.currentVersion.Minor() == v.Version.Minor() {
 				if latestVersion == nil || v.Compare(latestVersion) > 0 {
 					latestVersion = v.Version
 				}
 			}
 			continue
-		}
-
-		// Si estamos buscando prereleases, simplemente tomamos la mayor versión que sea mayor que la actual
-		if flags.Pre {
-			if latestVersion == nil || v.Compare(latestVersion) > 0 {
-				latestVersion = v.Version
-			}
-			continue
-		}
-
-		// Si no estamos buscando prereleases, tomamos la mayor versión que no sea prerelease
-		if v.Version.Prerelease() == "" {
-			if latestVersion == nil || v.Compare(latestVersion) > 0 {
-				latestVersion = v.Version
-			}
 		}
 	}
 
