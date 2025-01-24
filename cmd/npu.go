@@ -25,6 +25,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&flags.Registry, "registry", "r", "https://registry.npmjs.org/", "NPM registry URL")
 	rootCmd.Flags().StringVarP(&flags.ConfigFile, "config", "c", "", "Path to config file (default: .npmrc)")
 
+	rootCmd.Flags().BoolVar(&flags.Pre, "pre", false, "Update to latest versions")
 	rootCmd.Flags().BoolVarP(&flags.Minor, "minor", "m", false, "Update to latest minor versions")
 	rootCmd.Flags().BoolVarP(&flags.Patch, "patch", "p", false, "Update to latest patch versions")
 	rootCmd.Flags().BoolVarP(&flags.MaintainSemver, "semanticVersion", "s", false, "Maintain semver satisfaction")
@@ -40,7 +41,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.DryRun, "dryRun", "D", false, "Show what would be updated without making changes")
 	rootCmd.Flags().BoolVarP(&flags.Verbose, "verbose", "V", false, "Show detailed output")
 	rootCmd.Flags().StringVarP(&flags.PackageManager, "packageManager", "M", "", "Package manager to use (npm, yarn, pnpm, bun)")
-	rootCmd.Flags().StringVarP(&flags.LogLevel, "log", "l", "info", "Log level (debug, info, warn, error)")
+	rootCmd.Flags().StringVar(&flags.LogLevel, "log", "info", "Log level (debug, info, warn, error)")
 
 	rootCmd.Flags().IntVarP(&flags.Timeout, "timeout", "t", 30, "Timeout in seconds for each package update")
 

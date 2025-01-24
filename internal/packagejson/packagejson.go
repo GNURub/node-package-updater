@@ -280,11 +280,6 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 		// Actualizar las versiones en el mapa de dependencias
 		if depsMap, ok := depsMap.(orderedmap.OrderedMap); ok {
 			updatedVersion := dep.NextVersion.String()
-
-			if flags.KeepRangeOperator {
-				updatedVersion = fmt.Sprintf("%s%s", dep.CurrentVersion.Prefix(), updatedVersion)
-			}
-
 			depsMap.Set(dep.PackageName, updatedVersion)
 		}
 	}

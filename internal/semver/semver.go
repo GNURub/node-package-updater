@@ -240,15 +240,15 @@ func parse(v string) (p Version, ok bool) {
 		v = v[1:]
 	}
 
-	p.version = v
-
 	prefix := getPrefix(v)
 	if prefix != "" {
 		p.prefix = prefix
-		v = v[len(prefix):]
+		v = strings.TrimLeft(v, prefix)
 	}
 
-	p.major, v, ok = parseInt(v[1:])
+	p.version = v
+
+	p.major, v, ok = parseInt(v[0:])
 	if !ok {
 		return
 	}

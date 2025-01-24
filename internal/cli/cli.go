@@ -14,6 +14,7 @@ type Flags struct {
 	KeepRangeOperator bool
 	LogLevel          string
 	MaintainSemver    bool
+	Pre               bool
 	Minor             bool
 	NoInstall         bool
 	NoInteractive     bool
