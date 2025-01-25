@@ -33,7 +33,13 @@
     "cli",
     "dependency manager",
     "npm dependencies",
-    "node package updater"
+    "node package updater",
+    "dependencies",
+    "npm",
+    "package.json",
+    "update",
+    "upgrade",
+    "versions"
   ],
   "author": "Ruben Cid Lara",
   "license": "MIT"
