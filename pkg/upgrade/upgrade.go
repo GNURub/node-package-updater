@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 
+	"github.com/GNURub/node-package-updater/internal/semver"
 	"github.com/GNURub/node-package-updater/internal/version"
 )
 
@@ -40,7 +40,12 @@ func getLatestRelease() (*Release, error) {
 }
 
 func isNewerVersion(latest string) bool {
-	return strings.Compare(version.Version, latest) < 0
+	currentVersion := semver.NewSemver(version.Version)
+	if currentVersion.IsValid() {
+		return currentVersion.Compare(semver.NewSemver(latest)) < 0
+	}
+
+	return false
 }
 
 func downloadBinary(url, destination string) error {
@@ -61,8 +66,6 @@ func downloadBinary(url, destination string) error {
 }
 
 func replaceBinary(newBinary string) error {
-	// Obtenemos el directorio donde esta el binario actual
-	// y lo reemplazamos por el nuevo binario
 	currentBinary, err := os.Executable()
 	if err != nil {
 		return err
@@ -110,7 +113,6 @@ func Upgrade() error {
 		return fmt.Errorf("failed to set executable permissions: %w", err)
 	}
 
-	// Reemplazar el binario actual
 	fmt.Println("🔄 Replacing the current binary...")
 	if err := replaceBinary(newBinary); err != nil {
 		return fmt.Errorf("failed to replace the binary: %w", err)

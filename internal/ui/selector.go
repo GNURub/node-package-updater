@@ -15,8 +15,8 @@ var (
 	baseStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderForeground(lipgloss.Color("#63B0B8"))
-	getFatStyle     = lipgloss.NewStyle().Margin(0).Foreground(lipgloss.Color("#63B0B8")).Render("↓") // Aseguramos que las flechas no se afecten
-	loseWeightStyle = lipgloss.NewStyle().Margin(0).Foreground(lipgloss.Color("#FF75B7")).Render("↑") // Lo mismo aquí
+	getFatStyle     = lipgloss.NewStyle().Margin(0).Foreground(lipgloss.Color("#63B0B8")).Render("↓")
+	loseWeightStyle = lipgloss.NewStyle().Margin(0).Foreground(lipgloss.Color("#FF75B7")).Render("↑")
 )
 
 type sessionState uint
@@ -129,7 +129,6 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			cursorVersion := 0
 			currentWeight := uint64(0)
 
-			// Get the current weight
 			for _, v := range m.dependencies[cursor].Versions.Values() {
 				if m.dependencies[cursor].CurrentVersion.Compare(v.Version) == 0 {
 					currentWeight = v.Weight
@@ -142,21 +141,17 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 				var s strings.Builder
 
-				// Calculamos la diferencia de peso y mostramos la flecha
 				diff := int64(v.Weight - currentWeight)
 				if diff == 0 {
 					s.WriteString(
-						// Solo aplicamos el estilo a las flechas
 						fmt.Sprintf("  %dKB", diff/1024),
 					)
 				} else if diff > 0 {
 					s.WriteString(
-						// Solo aplicamos el estilo a las flechas
 						fmt.Sprintf("%s %dKB", loseWeightStyle, diff/1024),
 					)
 				} else {
 					s.WriteString(
-						// Lo mismo para la flecha contraria
 						fmt.Sprintf("%s %dKB", getFatStyle, diff/1024),
 					)
 				}

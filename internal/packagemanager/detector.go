@@ -1,4 +1,3 @@
-// internal/packagemanager/detector.go
 package packagemanager
 
 import (
@@ -125,7 +124,6 @@ func (pm *PackageManager) Install() error {
 	command := pm.installCommand()
 	var cmd *exec.Cmd
 
-	// Detecta la plataforma y selecciona el shell adecuado
 	switch runtime.GOOS {
 	case "windows":
 		cmd = exec.Command("cmd", "/C", strings.Join(command, " "))

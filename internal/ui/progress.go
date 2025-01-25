@@ -15,7 +15,6 @@ type ProgressMsg struct {
 }
 type PackageName string
 
-// progressModel representa el modelo de progreso.
 type progressModel struct {
 	progress    progress.Model
 	total       int

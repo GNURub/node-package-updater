@@ -75,7 +75,6 @@ async function install() {
       fs.chmodSync(binaryPath, '755');
     }
 
-    // Crear el script wrapper
     const wrapperPath = path.join(binPath, 'run.js');
 
     const wrapperContent = `#!/usr/bin/env node

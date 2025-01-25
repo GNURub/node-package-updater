@@ -162,7 +162,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	currentPackageName := make(chan string, totalDeps)
 	dependencyProcessed := make(chan bool, totalDeps)
 
-	// Solo mostrar la barra de progreso si NoInteractive es falso
 	var bar *tea.Program
 	if !flags.NoInteractive {
 		bar, _ = ui.ShowProgressBar(totalDeps)
@@ -210,7 +209,6 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		return errors.New("no dependencies to update")
 	}
 
-	// Solo permitir la selección interactiva si NoInteractive es falso
 	if !flags.NoInteractive {
 		depsWithNewVersion, _ = ui.SelectDependencies(depsWithNewVersion)
 	} else {
@@ -259,7 +257,6 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 		return fmt.Errorf("[ERROR] Failed to parse package.json: %w", err)
 	}
 
-	// Mapear secciones del JSON con las dependencias actualizadas
 	depSections := map[string]string{
 		"prod": "dependencies",
 		"dev":  "devDependencies",
@@ -277,7 +274,6 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 			continue
 		}
 
-		// Actualizar las versiones en el mapa de dependencias
 		if depsMap, ok := depsMap.(orderedmap.OrderedMap); ok {
 			updatedVersion := dep.NextVersion.String()
 			depsMap.Set(dep.PackageName, updatedVersion)

@@ -200,17 +200,14 @@ func (d Dependencies) FilterForUpdate() Dependencies {
 	return filtered
 }
 
-// parseNpmrc lee y parsea el archivo .npmrc
 func parseNpmrc() (*NpmrcConfig, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("error getting home directory: %w", err)
 	}
 
-	// Buscar primero en el directorio actual
 	npmrcPath := ".npmrc"
 	if _, err := os.Stat(npmrcPath); os.IsNotExist(err) {
-		// Si no existe, buscar en el directorio home
 		npmrcPath = filepath.Join(home, ".npmrc")
 	}
 
@@ -219,7 +216,6 @@ func parseNpmrc() (*NpmrcConfig, error) {
 		return nil, fmt.Errorf("error reading .npmrc: %w", err)
 	}
 
-	// Parsear el contenido del .npmrc
 	config := &NpmrcConfig{}
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
@@ -272,9 +268,7 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 	versions := NewVersions()
 	reqToNpm := true
 
-	// Intentar restaurar datos de la caché
 	if err := versions.Restore(d.PackageName, cache); err == nil {
-		// Intentar obtener el ETag desde la caché
 		cachedEtag, err := cache.Get(d.PackageName + "-etag")
 		if err == nil {
 			etag = string(cachedEtag)

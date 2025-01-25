@@ -56,9 +56,7 @@ func (v *Version) IsValid() bool {
 	return v.isValid
 }
 
-// Check determines if the given version matches the prefix requirements of the current version
 func (v *Version) Check(w *Version) bool {
-	// If no prefix, versions must be exactly equal
 	if v.prefix == "" {
 		return v.Compare(w) == 0
 	}
@@ -201,7 +199,6 @@ func (v *Version) GetMatchPatchVersion(vs ByVersion) *Version {
 }
 
 func (v *Version) GetMatchMinorVersion(vs ByVersion) *Version {
-	// Sort the versions in descending order
 	sort.Sort(sort.Reverse(vs))
 
 	for _, candidate := range vs {
