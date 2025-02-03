@@ -8,6 +8,16 @@ import (
 
 var prefixes = []string{">=", ">", "^", "~"}
 
+// Version represents a semantic version string.
+const (
+	// Major represents the major version number.
+	Major = "major"
+	// Minor represents the minor version number.
+	Minor = "minor"
+	// Patch represents the patch version number.
+	Patch = "patch"
+)
+
 type Version struct {
 	prefix     string
 	major      string
@@ -177,6 +187,19 @@ func (v *Version) Compare(w *Version) int {
 		return c
 	}
 	return comparePrerelease(v.prerelease, w.prerelease)
+}
+
+func (v *Version) Diff(w *Version) string {
+	if v.major != w.major {
+		return Major
+	}
+	if v.minor != w.minor {
+		return Minor
+	}
+	if v.patch != w.patch {
+		return Patch
+	}
+	return ""
 }
 
 func (v *Version) String() string {
