@@ -154,9 +154,29 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
+	depsByWorkspace, err := UpdateDependencies(allDeps, flags, p.cache)
+	if err != nil {
+		return err
+	}
+
+	for workspace, pkg := range p.workspacesPkgs {
+		if deps, ok := depsByWorkspace[workspace]; ok {
+			err := pkg.updatePackageJSON(flags, deps)
+			if err != nil {
+				return fmt.Errorf("error updating package.json: %v", err)
+			}
+		}
+	}
+
+	fmt.Println("🎉! All dependencies updated successfully!")
+
+	return nil
+}
+
+func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache *cache.Cache) (map[string]dependency.Dependencies, error) {
 	totalDeps := len(allDeps)
 	if totalDeps == 0 {
-		return errors.New("no dependencies to update")
+		return nil, errors.New("no dependencies to update")
 	}
 
 	currentPackageName := make(chan string, totalDeps)
@@ -171,7 +191,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	wg.Add(totalDeps)
 
 	go func() {
-		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, p.cache)
+		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, cache)
 	}()
 
 	go func() {
@@ -206,7 +226,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	depsWithNewVersion := allDeps.FilterWithNewVersion()
 	if len(depsWithNewVersion) == 0 {
-		return errors.New("no dependencies to update")
+		return nil, errors.New("no dependencies to update")
 	}
 
 	if !flags.NoInteractive {
@@ -219,7 +239,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 	depsToUpdate := depsWithNewVersion.FilterForUpdate()
 	if len(depsToUpdate) == 0 {
-		return errors.New("no dependencies to update")
+		return nil, errors.New("no dependencies to update")
 	}
 
 	var depsByWorkspace = make(map[string]dependency.Dependencies)
@@ -230,19 +250,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 		depsByWorkspace[dep.Workspace] = append(depsByWorkspace[dep.Workspace], dep)
 	}
-
-	for workspace, pkg := range p.workspacesPkgs {
-		if deps, ok := depsByWorkspace[workspace]; ok {
-			err := pkg.updatePackageJSON(flags, deps)
-			if err != nil {
-				return fmt.Errorf("error updating package.json: %v", err)
-			}
-		}
-	}
-
-	fmt.Println("🎉! All dependencies updated successfully!")
-
-	return nil
+	return depsByWorkspace, nil
 }
 
 func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency.Dependencies) error {

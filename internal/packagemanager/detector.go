@@ -1,6 +1,7 @@
 package packagemanager
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,8 +9,21 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/GNURub/node-package-updater/internal/dependency"
 	"gopkg.in/yaml.v3"
 )
+
+type npmGoblaDeps struct {
+	Deps map[string]struct {
+		Version string `json:"version"`
+	} `json:"dependencies"`
+}
+
+type pnpmGoblaDeps struct {
+	Dependencies map[string]struct {
+		Version string `json:"version"`
+	} `json:"dependencies"`
+}
 
 type PackageManager struct {
 	Name      string
@@ -50,6 +64,8 @@ var (
 	}
 )
 
+var SupportedPackageManagers = []*PackageManager{Bun, Yarn, Pnpm, Npm, Deno}
+
 func (p *PackageManager) GetWorkspacesPaths(dir string, pkgJsonWorkspaces []string) []string {
 
 	if p == Pnpm {
@@ -79,17 +95,33 @@ func (p *PackageManager) GetWorkspacesPaths(dir string, pkgJsonWorkspaces []stri
 	return workspacePaths
 }
 
-func Detect(projectPath, manager string) *PackageManager {
-	supportedPackageManagers := []*PackageManager{Bun, Yarn, Pnpm, Npm}
+func GetPackageManager(manager string) *PackageManager {
+	switch manager {
+	case "bun":
+		return Bun
+	case "yarn":
+		return Yarn
+	case "pnpm":
+		return Pnpm
+	case "deno":
+		return Deno
+	case "npm":
+		return Npm
+	default:
+		return Npm
+	}
+}
 
+func Detect(projectPath, manager string) *PackageManager {
 	if manager != "" {
-		for _, pm := range supportedPackageManagers {
+		for _, pm := range SupportedPackageManagers {
 			if strings.Contains(manager, pm.Name) {
 				return pm
 			}
 		}
 	}
-	for _, pm := range supportedPackageManagers {
+
+	for _, pm := range SupportedPackageManagers {
 		_, cmdExists := exec.LookPath(pm.Name)
 		if cmdExists != nil {
 			continue
@@ -105,23 +137,98 @@ func Detect(projectPath, manager string) *PackageManager {
 	return Npm
 }
 
-func (pm *PackageManager) installCommand() []string {
+func (pm *PackageManager) npmGlobalDeps() (dependency.Dependencies, error) {
+	cmd := exec.Command("npm", "list", "-g", "--depth=0", "--json")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list global dependencies: %w", err)
+	}
+
+	var deps npmGoblaDeps
+	if err := json.Unmarshal(output, &deps); err != nil {
+		return nil, fmt.Errorf("failed to parse global dependencies: %w", err)
+	}
+
+	var allDeps dependency.Dependencies
+	for depName, dep := range deps.Deps {
+		d, err := dependency.NewDependency(depName, dep.Version, "", "global")
+		if err != nil {
+			continue
+		}
+		allDeps = append(allDeps, d)
+	}
+
+	return allDeps, nil
+}
+
+func (pm *PackageManager) pnpmGlobalDeps() (dependency.Dependencies, error) {
+	cmd := exec.Command("pnpm", "list", "-g", "--depth=0", "--json")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list global dependencies: %w", err)
+	}
+
+	var deps []pnpmGoblaDeps
+	if err := json.Unmarshal(output, &deps); err != nil {
+		return nil, fmt.Errorf("failed to parse global dependencies: %w", err)
+	}
+
+	var allDeps dependency.Dependencies
+	for _, dep := range deps {
+		for depName, depInfo := range dep.Dependencies {
+			d, err := dependency.NewDependency(depName, depInfo.Version, "", "global")
+			if err != nil {
+				continue
+			}
+			allDeps = append(allDeps, d)
+		}
+
+	}
+
+	return allDeps, nil
+}
+
+func (pm *PackageManager) GetGlobalDeps() (dependency.Dependencies, error) {
 	switch pm {
-	case Bun:
-		return []string{"bun", "install"}
-	case Yarn:
-		return []string{"yarn", "install"}
-	case Pnpm:
-		return []string{"pnpm", "install"}
 	case Npm:
-		return []string{"npm", "install"}
+		return pm.npmGlobalDeps()
+	case Pnpm:
+		return pm.pnpmGlobalDeps()
+	case Bun:
+		return nil, fmt.Errorf("bun does not support global dependencies")
+	case Yarn:
+		return nil, fmt.Errorf("yarn does not support global dependencies")
+	case Deno:
+		return nil, fmt.Errorf("deno does not support global dependencies")
 	default:
-		return []string{"npm", "install"}
+		return nil, fmt.Errorf("npm does not support global dependencies")
 	}
 }
 
-func (pm *PackageManager) Install() error {
-	command := pm.installCommand()
+func (pm *PackageManager) installCommand(args ...string) []string {
+	cmd := []string{}
+	switch pm {
+	case Bun:
+		cmd = append(cmd, "bun", "install")
+	case Yarn:
+		cmd = append(cmd, "yarn", "install")
+	case Pnpm:
+		cmd = append(cmd, "pnpm", "install")
+	case Deno:
+		cmd = append(cmd, "deno", "install")
+	default:
+		cmd = append(cmd, "npm", "install")
+	}
+
+	if len(args) > 0 {
+		cmd = append(cmd, args...)
+	}
+
+	return cmd
+}
+
+func (pm *PackageManager) Install(args ...string) error {
+	command := pm.installCommand(args...)
 	var cmd *exec.Cmd
 
 	switch runtime.GOOS {

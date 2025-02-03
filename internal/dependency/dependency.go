@@ -131,6 +131,10 @@ func (versions *Versions) Save(pkgName string, cache *cache.Cache) error {
 }
 
 func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
+	if cache == nil {
+		return errors.New("cache is nil")
+	}
+
 	if !cache.Has(pkgName) {
 		return errors.New("key not found")
 	}
@@ -287,8 +291,10 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 			return fmt.Errorf("[ERROR] Failed to fetch versions from registry for package '%s': %w", d.PackageName, fetchErr)
 		}
 
-		cache.Set(d.PackageName+"-etag", []byte(etag))
-		versions.Save(d.PackageName, cache)
+		if cache != nil {
+			cache.Set(d.PackageName+"-etag", []byte(etag))
+			versions.Save(d.PackageName, cache)
+		}
 	}
 
 	d.Versions = versions
