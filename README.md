@@ -21,7 +21,7 @@ npm install -g node-package-updater
 ## Usage
 
 ```bash
-A CLI application to manage dependencies
+A CLI application to manage NodeJs dependencies
 
 Usage:
   npu [flags]
@@ -29,6 +29,7 @@ Usage:
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
+  global      Global dependencies update
   help        Help about any command
   upgrade     Upgrade to the latest version of the CLI
   version     Print the version number of NPU
@@ -43,12 +44,13 @@ Flags:
   -I, --include strings         Packages to include (can be specified multiple times)
   -i, --includePeer             Include peer dependencies
   -k, --keepRange               Keep range operator on version (default true)
-  -l, --log string              Log level (debug, info, warn, error) (default "info")
+      --log string              Log level (debug, info, warn, error) (default "info")
   -m, --minor                   Update to latest minor versions
   -n, --noInstall               Do not install packages after updating
   -x, --nonInteractive          Non-interactive mode
   -M, --packageManager string   Package manager to use (npm, yarn, pnpm, bun)
   -p, --patch                   Update to latest patch versions
+      --pre                     Update to latest versions
   -P, --production              Update only production dependencies
   -r, --registry string         NPM registry URL (default "https://registry.npmjs.org/")
   -s, --semanticVersion         Maintain semver satisfaction

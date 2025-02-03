@@ -11,7 +11,7 @@ import (
 var globalCmd = &cobra.Command{
 	Use:     "global",
 	Aliases: []string{"g"},
-	Short:   "Global deps",
+	Short:   "Global dependencies update",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := global.UpdateGlobalDependencies(flags); err != nil {
 			fmt.Printf("❌ Update gobal dependencies failed: %v\n", err)
