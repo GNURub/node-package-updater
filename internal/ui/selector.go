@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/GNURub/node-package-updater/internal/dependency"
+	"github.com/GNURub/node-package-updater/internal/semver"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -109,9 +110,23 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					m.selected[i] = struct{}{}
 				}
 			}
-		case "ctrl+p":
+		case "ctrl+z":
 			for i, dep := range m.dependencies {
 				if dep.Env == "prod" {
+					m.selected[i] = struct{}{}
+				}
+			}
+		case "ctrl+x":
+			// Select only patch versions
+			for i, dep := range m.dependencies {
+				if dep.CurrentVersion.Diff(dep.NextVersion) == semver.Patch {
+					m.selected[i] = struct{}{}
+				}
+			}
+		case "ctrl+b":
+			// Select only minor versions
+			for i, dep := range m.dependencies {
+				if dep.CurrentVersion.Diff(dep.NextVersion) == semver.Minor {
 					m.selected[i] = struct{}{}
 				}
 			}
@@ -241,7 +256,7 @@ func (m model) View() string {
 
 		s.WriteString(baseStyle.Render(m.dependencyTable.View()) + "\n\n")
 
-		footer = "\u2191/\u2193: navigate \u2022 space|enter: select \u2022 ctrl+a: select all \u2022 ctrl+p: select only prod \u2022 ctrl+d: select only dev \u2022 ctrl+u: unselect all"
+		footer = "\u2191/\u2193: navigate \u2022 space|enter: select \u2022 ctrl+a: select all \u2022 ctrl+z: select only prod \u2022 ctrl+x: select patchs \u2022 ctrl+b: select minors \u2022 ctrl+d: select only dev \u2022 ctrl+u: unselect all"
 	}
 
 	s.WriteString(lipgloss.NewStyle().MarginLeft(2).Render(fmt.Sprintf("%s \u2022 q|ctrl+c: exit\n", footer)))
