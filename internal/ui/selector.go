@@ -47,26 +47,26 @@ func tick() tea.Cmd {
 
 func drawStyleForNewVersion(dep *dependency.Dependency) string {
 	var s strings.Builder
-	sufix := ""
+	v := dep.NextVersion.String()
 
 	if dep.NextVersion.Deprecated {
-		sufix = " [DEPRECATED]"
+		v = v + "🚩"
 	}
 
 	if dep.CurrentVersion.Major() < dep.NextVersion.Major() {
 		s.WriteString(
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")).Render(dep.NextVersion.String() + sufix),
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")).Render(v),
 		)
 	} else if dep.CurrentVersion.Minor() < dep.NextVersion.Minor() {
 		s.WriteString(
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7f50")).Render(dep.NextVersion.String() + sufix),
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7f50")).Render(v),
 		)
 	} else if dep.CurrentVersion.Patch() < dep.NextVersion.Patch() {
 		s.WriteString(
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")).Render(dep.NextVersion.String() + sufix),
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")).Render(v),
 		)
 	} else {
-		s.WriteString(dep.NextVersion.String() + sufix)
+		s.WriteString(v)
 	}
 
 	return s.String()
@@ -168,6 +168,10 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 			for i, v := range m.dependencies[cursor].Versions.Values() {
 				strVersion := v.String()
+
+				if v.Deprecated {
+					strVersion = strVersion + "🚩"
+				}
 
 				var s strings.Builder
 
