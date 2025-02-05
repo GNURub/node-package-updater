@@ -102,10 +102,18 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				continue
 			}
 
-			workspacePkg, err := LoadPackageJSON(
-				workspacePath,
+			options := []Option{
 				WithPackageManager(pkg.packageJson.Manager),
 				WithCache(pkg.cache),
+			}
+
+			if pkg.processWorkspaces {
+				options = append(options, EnableWorkspaces())
+			}
+
+			workspacePkg, err := LoadPackageJSON(
+				workspacePath,
+				options...,
 			)
 
 			if err != nil {
