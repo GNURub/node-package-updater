@@ -12,10 +12,9 @@ import (
 
 var flags = &cli.Flags{}
 var rootCmd = &cobra.Command{
-	Use:   "npu",
-	Short: "A CLI application to manage dependencies",
-	Long:  "A CLI application to manage dependencies",
-	Args:  cobra.MaximumNArgs(1),
+	Use:  "npu",
+	Long: "A CLI application to manage NodeJs dependencies",
+	Args: cobra.MaximumNArgs(1),
 }
 
 func init() {

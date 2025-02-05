@@ -23,8 +23,6 @@ npm install -g node-package-updater
 ```bash
 A CLI application to manage NodeJs dependencies
 
-A CLI application to manage dependencies
-
 Usage:
   npu [flags]
   npu [command]
@@ -65,12 +63,12 @@ Flags:
 
 ## Benchmarks
 
-| Command     |      Mean [s] | Min [s] | Max [s] |    Relative |
-| :---------- | ------------: | ------: | ------: | ----------: |
-| `npu -x -n` | 1.005 ± 0.144 |   0.885 |   1.367 |        1.00 |
-| `ncu -u`    | 3.831 ± 0.298 |   3.519 |   4.504 | 3.81 ± 0.62 |
+| Command     |      Mean [ms] | Min [ms] | Max [ms] |    Relative |
+| :---------- | -------------: | -------: | -------: | ----------: |
+| `npu -x -n` |  851.7 ± 194.2 |    699.7 |   1320.8 |        1.00 |
+| `ncu -u`    | 2572.8 ± 292.2 |   2227.6 |   3065.2 | 3.02 ± 0.77 |
 
 ### Summary
 
 npu -x -n ran
-3.81 ± 0.62 times faster than ncu -u
+3.02 ± 0.77 times faster than ncu -u
