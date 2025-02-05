@@ -46,15 +46,30 @@ func tick() tea.Cmd {
 }
 
 func drawStyleForNewVersion(dep *dependency.Dependency) string {
-	if dep.CurrentVersion.Major() < dep.NextVersion.Major() {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")).Render(dep.NextVersion.String())
-	} else if dep.CurrentVersion.Minor() < dep.NextVersion.Minor() {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ffa502")).Render(dep.NextVersion.String())
-	} else if dep.CurrentVersion.Patch() < dep.NextVersion.Patch() {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")).Render(dep.NextVersion.String())
+	var s strings.Builder
+	sufix := ""
+
+	if dep.NextVersion.Deprecated {
+		sufix = " [DEPRECATED]"
 	}
 
-	return dep.NextVersion.String()
+	if dep.CurrentVersion.Major() < dep.NextVersion.Major() {
+		s.WriteString(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")).Render(dep.NextVersion.String() + sufix),
+		)
+	} else if dep.CurrentVersion.Minor() < dep.NextVersion.Minor() {
+		s.WriteString(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7f50")).Render(dep.NextVersion.String() + sufix),
+		)
+	} else if dep.CurrentVersion.Patch() < dep.NextVersion.Patch() {
+		s.WriteString(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")).Render(dep.NextVersion.String() + sufix),
+		)
+	} else {
+		s.WriteString(dep.NextVersion.String() + sufix)
+	}
+
+	return s.String()
 }
 
 func (m model) Init() tea.Cmd {
@@ -75,7 +90,7 @@ func updateVersions(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case " ", "enter":
 			depCursor := m.dependencyTable.Cursor()
 			versionCursor := m.versionsTable.Cursor()
-			m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions.Values()[versionCursor].Version
+			m.dependencies[depCursor].NextVersion = m.dependencies[depCursor].Versions.Values()[versionCursor]
 			m.selected[depCursor] = struct{}{}
 			m.state = depsView
 			m.dependencyTable.Focus()
@@ -119,14 +134,14 @@ func updateDeps(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		case "ctrl+x":
 			// Select only patch versions
 			for i, dep := range m.dependencies {
-				if dep.CurrentVersion.Diff(dep.NextVersion) == semver.Patch {
+				if dep.CurrentVersion.Diff(dep.NextVersion.Version) == semver.Patch {
 					m.selected[i] = struct{}{}
 				}
 			}
 		case "ctrl+b":
 			// Select only minor versions
 			for i, dep := range m.dependencies {
-				if dep.CurrentVersion.Diff(dep.NextVersion) == semver.Minor {
+				if dep.CurrentVersion.Diff(dep.NextVersion.Version) == semver.Minor {
 					m.selected[i] = struct{}{}
 				}
 			}
@@ -269,7 +284,7 @@ func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, 
 		{Title: "", Width: 2},
 		{Title: "Dependency", Width: 30},
 		{Title: "Current Version", Width: 15},
-		{Title: "New Version", Width: 30},
+		{Title: "New Version", Width: 40},
 		{Title: "Environment", Width: 15},
 		{Title: "Workspace", Width: 20},
 	}

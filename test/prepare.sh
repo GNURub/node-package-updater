@@ -25,6 +25,7 @@ cat << EOF > ./package.json
     "@angular/platform-server": "^15.0.0",
     "@angular/router": "~15.0.0",
     "@angular/service-worker": ">=15.0.0",
+    "nomnom": "^0.0.1",
     "@cesdk/cesdk-js": "^1.43.0",
     "@ctrl/ngx-emoji-mart": "9.2.0",
     "@ffmpeg/ffmpeg": "^0.12.15",
