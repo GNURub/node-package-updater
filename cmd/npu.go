@@ -34,7 +34,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.PeerDependencies, "includePeer", "i", false, "Include peer dependencies")
 
 	rootCmd.Flags().BoolVarP(&flags.WithWorkspaces, "workspaces", "w", false, "Include workspace repositories")
-	rootCmd.Flags().Uint16Var(&flags.Depth, "depth", 0, "Update depth")
+	rootCmd.Flags().Uint8Var(&flags.Depth, "depth", 0, "Multi-repo update depth")
 	rootCmd.Flags().BoolVar(&flags.SkipDeprecated, "skipDeprecated", true, "Skip deprecated packages")
 
 	rootCmd.Flags().BoolVarP(&flags.NoInstall, "noInstall", "n", false, "Do not install packages after updating")

@@ -37,6 +37,7 @@ Available Commands:
 Flags:
   -C, --cleanCache              Clean cache
   -c, --config string           Path to config file (default: .npmrc)
+      --depth uint16            Multi-repo update depth
   -d, --dir string              Root directory for package search
   -D, --dryRun                  Show what would be updated without making changes
   -e, --exclude strings         Packages to exclude (can be specified multiple times)

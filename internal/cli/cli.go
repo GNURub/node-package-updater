@@ -8,7 +8,7 @@ type Flags struct {
 	BaseDir           string
 	CleanCache        bool
 	ConfigFile        string
-	Depth             uint16
+	Depth             uint8
 	DryRun            bool
 	Exclude           []string
 	Filter            string

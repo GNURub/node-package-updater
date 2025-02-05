@@ -30,7 +30,7 @@ type PackageJSON struct {
 	PackageManager    *packagemanager.PackageManager
 	workspacesPkgs    map[string]*PackageJSON
 	processWorkspaces bool
-	depth             uint16
+	depth             uint8
 	cache             *cache.Cache
 	packageJson       struct {
 		Manager          string            `json:"packageManager,omitempty"`
@@ -73,7 +73,7 @@ func EnableWorkspaces() Option {
 	}
 }
 
-func WithDepth(depth uint16) Option {
+func WithDepth(depth uint8) Option {
 	return func(p *PackageJSON) error {
 		p.depth = depth
 		if depth > 0 {
