@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -209,6 +210,22 @@ type Dependency struct {
 }
 
 type Dependencies []*Dependency
+
+func (d Dependencies) FilterByRegex(filter string) Dependencies {
+	r, err := regexp.Compile(filter)
+	if err != nil {
+		return d
+	}
+
+	filtered := make(Dependencies, 0, len(d))
+	for _, dep := range d {
+		match := r.Match([]byte(dep.PackageName))
+		if match {
+			filtered = append(filtered, dep)
+		}
+	}
+	return filtered
+}
 
 func (d Dependencies) FilterWithNewVersion() Dependencies {
 	filtered := make(Dependencies, 0, len(d))

@@ -46,6 +46,7 @@ func init() {
 
 	rootCmd.Flags().IntVarP(&flags.Timeout, "timeout", "t", 30, "Timeout in seconds for each package update")
 
+	rootCmd.Flags().StringVarP(&flags.Filter, "filter", "f", "", "Filter packages by name regex")
 	rootCmd.Flags().StringSliceVarP(&flags.Include, "include", "I", []string{}, "Packages to include (can be specified multiple times)")
 	rootCmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "e", []string{}, "Packages to exclude (can be specified multiple times)")
 }

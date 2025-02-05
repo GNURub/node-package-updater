@@ -23,6 +23,8 @@ npm install -g node-package-updater
 ```bash
 A CLI application to manage NodeJs dependencies
 
+A CLI application to manage dependencies
+
 Usage:
   npu [flags]
   npu [command]
@@ -40,6 +42,7 @@ Flags:
   -d, --dir string              Root directory for package search
   -D, --dryRun                  Show what would be updated without making changes
   -e, --exclude strings         Packages to exclude (can be specified multiple times)
+  -f, --filter string           Filter packages by name regex
   -h, --help                    help for npu
   -I, --include strings         Packages to include (can be specified multiple times)
   -i, --includePeer             Include peer dependencies
@@ -54,6 +57,7 @@ Flags:
   -P, --production              Update only production dependencies
   -r, --registry string         NPM registry URL (default "https://registry.npmjs.org/")
   -s, --semanticVersion         Maintain semver satisfaction
+      --skipDeprecated          Skip deprecated packages (default true)
   -t, --timeout int             Timeout in seconds for each package update (default 30)
   -V, --verbose                 Show detailed output
   -w, --workspaces              Include workspace repositories

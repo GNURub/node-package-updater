@@ -162,6 +162,10 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 	}
 
+	if flags.Filter != "" {
+		allDeps = allDeps.FilterByRegex(flags.Filter)
+	}
+
 	depsByWorkspace, err := UpdateDependencies(allDeps, flags, p.cache)
 	if err != nil {
 		return err

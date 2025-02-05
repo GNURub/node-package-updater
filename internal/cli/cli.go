@@ -9,6 +9,7 @@ type Flags struct {
 	BaseDir           string
 	ConfigFile        string
 	DryRun            bool
+	Filter            string
 	Exclude           []string
 	Include           []string
 	KeepRangeOperator bool
