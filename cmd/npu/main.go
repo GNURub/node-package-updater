@@ -5,12 +5,13 @@ import (
 	"os"
 
 	"github.com/GNURub/node-package-updater/cmd"
+	"github.com/GNURub/node-package-updater/internal/constants"
 	"github.com/GNURub/node-package-updater/pkg/upgrade"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func main() {
-	newVersion := upgrade.GetNewVersion()
+	newVersion := upgrade.GetNewVersion(constants.RepoOwner, constants.RepoName)
 	if newVersion != "" {
 		titleStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#00FF00")).
