@@ -35,6 +35,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.PeerDependencies, "includePeer", "i", false, "Include peer dependencies")
 
 	rootCmd.Flags().BoolVarP(&flags.WithWorkspaces, "workspaces", "w", false, "Include workspace repositories")
+	rootCmd.Flags().BoolVar(&flags.SkipDeprecated, "skipDeprecated", true, "Skip deprecated packages")
 
 	rootCmd.Flags().BoolVarP(&flags.NoInstall, "noInstall", "n", false, "Do not install packages after updating")
 	rootCmd.Flags().BoolVarP(&flags.NoInteractive, "nonInteractive", "x", false, "Non-interactive mode")

@@ -93,6 +93,10 @@ func (vm *VersionManager) GetUpdatedVersion(flags *cli.Flags) (*Version, error) 
 			continue
 		}
 
+		if v.Deprecated && flags.SkipDeprecated {
+			continue
+		}
+
 		// Actualizar la última versión válida si corresponde
 		if latestVersion == nil || v.Compare(latestVersion.Version) > 0 {
 			latestVersion = v

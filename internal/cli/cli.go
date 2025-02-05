@@ -22,6 +22,7 @@ type Flags struct {
 	Patch             bool
 	PeerDependencies  bool
 	Production        bool
+	SkipDeprecated    bool
 	Registry          string
 	Timeout           int
 	Verbose           bool
