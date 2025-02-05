@@ -11,7 +11,8 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/npu/main.go",
             "args": [
-                "--dir=../../test",
+                "--dir=../../",
+                "--depth=1",
                 "-x"
             ]
         }

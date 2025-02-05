@@ -5,26 +5,27 @@ import (
 )
 
 type Flags struct {
-	CleanCache        bool
 	BaseDir           string
+	CleanCache        bool
 	ConfigFile        string
+	Depth             uint16
 	DryRun            bool
-	Filter            string
 	Exclude           []string
+	Filter            string
 	Include           []string
 	KeepRangeOperator bool
 	LogLevel          string
 	MaintainSemver    bool
-	Pre               bool
 	Minor             bool
 	NoInstall         bool
 	NoInteractive     bool
 	PackageManager    string
 	Patch             bool
 	PeerDependencies  bool
+	Pre               bool
 	Production        bool
-	SkipDeprecated    bool
 	Registry          string
+	SkipDeprecated    bool
 	Timeout           int
 	Verbose           bool
 	WithWorkspaces    bool

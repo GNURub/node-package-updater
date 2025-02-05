@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
@@ -28,6 +30,7 @@ type PackageJSON struct {
 	PackageManager    *packagemanager.PackageManager
 	workspacesPkgs    map[string]*PackageJSON
 	processWorkspaces bool
+	depth             uint16
 	cache             *cache.Cache
 	packageJson       struct {
 		Manager          string            `json:"packageManager,omitempty"`
@@ -65,6 +68,17 @@ func WithBaseDir(basedir string) Option {
 func EnableWorkspaces() Option {
 	return func(p *PackageJSON) error {
 		p.processWorkspaces = true
+		p.depth = 0
+		return nil
+	}
+}
+
+func WithDepth(depth uint16) Option {
+	return func(p *PackageJSON) error {
+		p.depth = depth
+		if depth > 0 {
+			p.processWorkspaces = false
+		}
 		return nil
 	}
 }
@@ -76,14 +90,11 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 
 	fullPackageJSONPath := path.Join(pkg.Dir, "package.json")
 	data, err := os.ReadFile(fullPackageJSONPath)
-	if err != nil {
-		return nil, fmt.Errorf("no package.json found on directory: %s", filepath.Dir(fullPackageJSONPath))
-	}
-
-	pkg.packageFilePath = fullPackageJSONPath
-
-	if err := json.Unmarshal(data, &pkg.packageJson); err != nil {
-		return nil, err
+	if err == nil {
+		pkg.packageFilePath = fullPackageJSONPath
+		if err := json.Unmarshal(data, &pkg.packageJson); err != nil {
+			return nil, err
+		}
 	}
 
 	pkg.workspacesPkgs = make(map[string]*PackageJSON)
@@ -122,6 +133,40 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 
 			pkg.workspacesPkgs[workspacePath] = workspacePkg
 		}
+	} else if pkg.depth > 0 {
+		filepath.Walk(filepath.Dir(pkg.Dir), func(path string, file fs.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// check depth of the directory
+			depth := len(filepath.SplitList(path))
+			if depth > int(pkg.depth) {
+				return filepath.SkipDir
+			}
+
+			if strings.Contains(file.Name(), "node_module") {
+				return filepath.SkipDir
+			}
+
+			if !strings.Contains(file.Name(), "package.json") {
+				return nil
+			}
+
+			workspacePkg, err := LoadPackageJSON(
+				filepath.Dir(path),
+				WithPackageManager(pkg.packageJson.Manager),
+				WithCache(pkg.cache),
+			)
+
+			if err != nil {
+				return err
+			}
+
+			pkg.workspacesPkgs[workspacePkg.Dir] = workspacePkg
+
+			return nil
+		})
 	}
 
 	pkg.workspacesPkgs[pkg.Dir] = pkg
