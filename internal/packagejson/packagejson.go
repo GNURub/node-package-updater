@@ -154,8 +154,10 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				return nil
 			}
 
+			fileDir := filepath.Dir(path)
+
 			workspacePkg, err := LoadPackageJSON(
-				filepath.Dir(path),
+				fileDir,
 				WithPackageManager(pkg.packageJson.Manager),
 				WithCache(pkg.cache),
 			)
@@ -220,13 +222,18 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		return err
 	}
 
+	allError := true
 	for workspace, pkg := range p.workspacesPkgs {
 		if deps, ok := depsByWorkspace[workspace]; ok {
 			err := pkg.updatePackageJSON(flags, deps)
-			if err != nil {
-				return fmt.Errorf("error updating package.json: %v", err)
+			if err == nil && allError {
+				allError = false
 			}
 		}
+	}
+
+	if allError {
+		return errors.New("failed to update package.json")
 	}
 
 	fmt.Println("🎉! All dependencies updated successfully!")
