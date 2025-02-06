@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -210,6 +211,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	if flags.Filter != "" {
 		allDeps = allDeps.FilterByRegex(flags.Filter)
 	}
+
+	// sort dependencies
+	sort.Sort(allDeps)
 
 	depsByWorkspace, err := UpdateDependencies(allDeps, flags, p.cache)
 	if err != nil {

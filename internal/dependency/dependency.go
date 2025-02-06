@@ -211,6 +211,26 @@ type Dependency struct {
 
 type Dependencies []*Dependency
 
+// Implement sort.Interface for Dependencies
+func (d Dependencies) Len() int {
+	return len(d)
+}
+
+func (d Dependencies) Less(i, j int) bool {
+	envI := d[i].getScoreForSort()
+	envJ := d[j].getScoreForSort()
+
+	if envI != envJ {
+		return envI < envJ
+	}
+
+	return d[i].PackageName < d[j].PackageName
+}
+
+func (d Dependencies) Swap(i, j int) {
+	d[i], d[j] = d[j], d[i]
+}
+
 func (d Dependencies) FilterByRegex(filter string) Dependencies {
 	r, err := regexp.Compile(filter)
 	if err != nil {
@@ -304,6 +324,17 @@ func NewDependency(packageName, currentVersion, env, workspace string) (*Depende
 		Env:            env,
 		Workspace:      workspace,
 	}, nil
+}
+
+func (d *Dependency) getScoreForSort() int {
+	switch d.Env {
+	case "prod":
+		return 0
+	case "dev":
+		return 1
+	default:
+		return 2
+	}
 }
 
 func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cache *cache.Cache) error {
