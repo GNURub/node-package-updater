@@ -224,7 +224,12 @@ func (d Dependencies) Less(i, j int) bool {
 		return envI < envJ
 	}
 
-	return d[i].PackageName < d[j].PackageName
+	packageNameDifference := strings.Compare(d[i].PackageName, d[j].PackageName)
+	if packageNameDifference != 0 {
+		return packageNameDifference < 0
+	}
+
+	return strings.Compare(d[i].Workspace, d[j].Workspace) < 0
 }
 
 func (d Dependencies) Swap(i, j int) {
