@@ -33,9 +33,12 @@ var (
 			Render("↑")
 
 	versionColors = map[semver.VersionDiff]lipgloss.Style{
-		semver.Major: lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")),
-		semver.Minor: lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7f50")),
-		semver.Patch: lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")),
+		semver.Prerelease: lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3f18")),
+		semver.Build:      lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3f18")),
+		semver.Major:      lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4757")),
+		semver.Minor:      lipgloss.NewStyle().Foreground(lipgloss.Color("#ff7f50")),
+		semver.Patch:      lipgloss.NewStyle().Foreground(lipgloss.Color("#2ed573")),
+		semver.None:       lipgloss.NewStyle().Foreground(lipgloss.Color("#576574")),
 	}
 )
 

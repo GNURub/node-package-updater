@@ -14,6 +14,10 @@ type VersionDiff int
 const (
 	// None indicates no version difference
 	None VersionDiff = iota
+	// Build indicates a build version difference (x.y.z+build)
+	Build
+	// Prerelease indicates a prerelease version difference (x.y.z-prerelease)
+	Prerelease
 	// Patch indicates a patch version difference (0.0.x)
 	Patch
 	// Minor indicates a minor version difference (0.x.0)
@@ -33,6 +37,10 @@ func (d VersionDiff) String() string {
 		return "minor"
 	case Major:
 		return "major"
+	case Prerelease:
+		return "prerelease"
+	case Build:
+		return "build"
 	default:
 		return "unknown"
 	}
@@ -218,6 +226,12 @@ func (v *Version) Diff(w *Version) VersionDiff {
 	}
 	if v.patch != w.patch {
 		return Patch
+	}
+	if v.prerelease != w.prerelease {
+		return Prerelease
+	}
+	if v.build != w.build {
+		return Build
 	}
 	return None
 }
