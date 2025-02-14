@@ -1,10 +1,11 @@
 #!/bin/bash
-
-#!/bin/bash
 echo "Preparing environment..."
 rm -rf node_modules
 rm -rf package-lock.json
 rm -rf package.json
+
+npm i npm-check-updates -g
+
 cat << EOF > ./package.json
 {
   "name": "test",

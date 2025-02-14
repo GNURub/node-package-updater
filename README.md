@@ -37,7 +37,7 @@ Available Commands:
 Flags:
   -C, --cleanCache              Clean cache
   -c, --config string           Path to config file (default: .npmrc)
-      --depth uint16            Multi-repo update depth
+      --depth uint8             Multi-repo update depth
   -d, --dir string              Root directory for package search
   -D, --dryRun                  Show what would be updated without making changes
   -e, --exclude strings         Packages to exclude (can be specified multiple times)
@@ -71,5 +71,4 @@ Flags:
 
 ### Summary
 
-npu -x -n ran
-3.02 ± 0.77 times faster than ncu -u
+npu -x -n ran 3.22 ± 1.14 times faster than ncu -u
