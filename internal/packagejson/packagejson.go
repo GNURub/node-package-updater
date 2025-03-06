@@ -105,7 +105,10 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	}
 
 	pkg.workspacesPkgs = make(map[string]*PackageJSON)
-	pkg.PackageManager = packagemanager.Detect(pkg.Dir, pkg.packageJson.Manager)
+
+	if pkg.PackageManager == nil {
+		pkg.PackageManager = packagemanager.Detect(pkg.Dir, pkg.packageJson.Manager)
+	}
 
 	for _, opt := range opts {
 		if err := opt(pkg); err != nil {
