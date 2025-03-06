@@ -382,7 +382,7 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	for _, dep := range updatedDeps {
-		if dep.Env == constants.PackageManager {
+		if dep.Env == constants.PackageManager && p.packageJson.Manager != "" {
 			// Manejo especial para el campo packageManager
 			prefix := ""
 			if dep.PackageNamePrefix != "" {
