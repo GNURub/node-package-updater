@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -45,6 +46,7 @@ func init() {
 	rootCmd.Flags().StringVar(&flags.LogLevel, "log", "info", "Log level (debug, info, warn, error)")
 
 	rootCmd.Flags().IntVarP(&flags.Timeout, "timeout", "t", 30, "Timeout in seconds for each package update")
+	rootCmd.Flags().IntVar(&flags.CPUs, "cpus", runtime.NumCPU(), "Number of CPUs to use for parallel processing")
 
 	rootCmd.Flags().StringVarP(&flags.Filter, "filter", "f", "", "Filter packages by name regex")
 	rootCmd.Flags().StringSliceVarP(&flags.Include, "include", "I", []string{}, "Packages to include (can be specified multiple times)")
@@ -53,6 +55,8 @@ func init() {
 
 func Exec() error {
 	rootCmd.Run = func(cmd *cobra.Command, args []string) {
+		runtime.GOMAXPROCS(flags.CPUs)
+
 		options := []packagejson.Option{}
 
 		baseDir := flags.BaseDir

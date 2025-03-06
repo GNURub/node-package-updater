@@ -25,6 +25,7 @@ type Flags struct {
 	Pre               bool
 	Production        bool
 	Registry          string
+	CPUs              int
 	SkipDeprecated    bool
 	Timeout           int
 	Verbose           bool
@@ -44,6 +45,10 @@ func (f *Flags) ValidateFlags() error {
 
 	if f.Timeout < 1 {
 		return fmt.Errorf("timeout must be greater than 0")
+	}
+
+	if f.CPUs < 1 {
+		return fmt.Errorf("cpus must be greater than 0")
 	}
 
 	return nil
