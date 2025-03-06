@@ -16,6 +16,7 @@ import (
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
+	"github.com/GNURub/node-package-updater/internal/constants"
 	"github.com/GNURub/node-package-updater/internal/semver"
 	"github.com/iancoleman/orderedmap"
 	"github.com/valyala/fasthttp"
@@ -205,7 +206,7 @@ type Dependency struct {
 	LatestVersion     *semver.Version
 	NextVersion       *Version
 	HaveToUpdate      bool
-	Env               string
+	Env               constants.DepEnv
 	Workspace         string
 	mu                sync.RWMutex
 }
@@ -317,7 +318,7 @@ func parseNpmrc() (*NpmrcConfig, error) {
 	return config, nil
 }
 
-func NewDependency(packageName, currentVersion, env, workspace string) (*Dependency, error) {
+func NewDependency(packageName, currentVersion string, env constants.DepEnv, workspace string) (*Dependency, error) {
 	version := semver.NewSemver(currentVersion)
 	if !version.IsValid() {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidVersion, currentVersion)
@@ -334,9 +335,9 @@ func NewDependency(packageName, currentVersion, env, workspace string) (*Depende
 
 func (d *Dependency) getScoreForSort() int {
 	switch d.Env {
-	case "prod":
+	case constants.Dependencies:
 		return 0
-	case "dev":
+	case constants.DevDependencies:
 		return 1
 	default:
 		return 2

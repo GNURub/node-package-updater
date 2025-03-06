@@ -353,7 +353,7 @@ func createInitialModel(deps dependency.Dependencies) model {
 			dep.PackageName,
 			dep.CurrentVersion.String(),
 			drawStyleForNewVersion(dep),
-			dep.Env,
+			dep.Env.ToEnv(),
 			dep.Workspace,
 		})
 	}

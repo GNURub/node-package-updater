@@ -16,7 +16,7 @@ import (
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
-	packageJSONConstants "github.com/GNURub/node-package-updater/internal/constants"
+	"github.com/GNURub/node-package-updater/internal/constants"
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/gitignore"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
@@ -214,7 +214,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 					formattedVersion = prefix + version
 				}
 
-				d, err := dependency.NewDependency(name, formattedVersion, packageJSONConstants.PackageManager, workspace)
+				d, err := dependency.NewDependency(name, formattedVersion, constants.PackageManager, workspace)
 				if err == nil {
 					// Guardamos el prefijo original como metadato para restaurarlo después
 					d.PackageNamePrefix = prefix
@@ -224,7 +224,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 
 		for name, version := range pkg.packageJson.Dependencies {
-			d, err := dependency.NewDependency(name, version, "prod", workspace)
+			d, err := dependency.NewDependency(name, version, constants.Dependencies, workspace)
 			if err != nil {
 				continue
 			}
@@ -233,7 +233,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 		if !flags.Production {
 			for name, version := range p.packageJson.DevDependencies {
-				d, err := dependency.NewDependency(name, version, "dev", workspace)
+				d, err := dependency.NewDependency(name, version, constants.DevDependencies, workspace)
 				if err != nil {
 					continue
 				}
@@ -242,7 +242,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 
 			if flags.PeerDependencies {
 				for name, version := range p.packageJson.PeerDependencies {
-					d, err := dependency.NewDependency(name, version, "peer", workspace)
+					d, err := dependency.NewDependency(name, version, constants.PeerDependencies, workspace)
 					if err != nil {
 						continue
 					}
@@ -375,14 +375,8 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 		return fmt.Errorf("[ERROR] Failed to parse package.json: %w", err)
 	}
 
-	depSections := map[string]string{
-		"prod": packageJSONConstants.Dependencies,
-		"dev":  packageJSONConstants.DevDependencies,
-		"peer": packageJSONConstants.Dependencies,
-	}
-
 	for _, dep := range updatedDeps {
-		if dep.Env == packageJSONConstants.PackageManager {
+		if dep.Env == constants.PackageManager {
 			// Manejo especial para el campo packageManager
 			prefix := ""
 			if dep.PackageNamePrefix != "" {
@@ -390,16 +384,11 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 			}
 			// Formateamos el packageManager con el formato correcto: name@version con el prefijo preservado
 			packageManagerValue := fmt.Sprintf("%s%s@%s", prefix, dep.PackageName, dep.NextVersion.String())
-			orderedJSON.Set(packageJSONConstants.PackageManager, packageManagerValue)
+			orderedJSON.Set(constants.PackageManager.String(), packageManagerValue)
 			continue
 		}
 
-		section, ok := depSections[dep.Env]
-		if !ok {
-			continue
-		}
-
-		depsMap, ok := orderedJSON.Get(section)
+		depsMap, ok := orderedJSON.Get(dep.Env.String())
 		if !ok {
 			continue
 		}
