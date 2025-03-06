@@ -198,15 +198,16 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 
 // Dependency represents a package dependency with version information
 type Dependency struct {
-	Versions       *Versions
-	PackageName    string
-	CurrentVersion *semver.Version
-	LatestVersion  *semver.Version
-	NextVersion    *Version
-	HaveToUpdate   bool
-	Env            string
-	Workspace      string
-	mu             sync.RWMutex
+	Versions          *Versions
+	PackageName       string
+	PackageNamePrefix string
+	CurrentVersion    *semver.Version
+	LatestVersion     *semver.Version
+	NextVersion       *Version
+	HaveToUpdate      bool
+	Env               string
+	Workspace         string
+	mu                sync.RWMutex
 }
 
 type Dependencies []*Dependency

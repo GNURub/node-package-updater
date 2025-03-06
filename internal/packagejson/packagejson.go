@@ -9,12 +9,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
+	packageJSONConstants "github.com/GNURub/node-package-updater/internal/constants"
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/gitignore"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
@@ -23,6 +25,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/iancoleman/orderedmap"
 )
+
+// Agregamos un patrón regex para parsear el campo packageManager
+var packageManagerRegex = regexp.MustCompile(`^([~^]?)([a-zA-Z0-9-]+)@(.+)$`)
 
 type Option func(*PackageJSON) error
 
@@ -164,10 +169,6 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				return filepath.SkipDir
 			}
 
-			if strings.Contains(file.Name(), "node_module") {
-				return filepath.SkipDir
-			}
-
 			if !strings.Contains(file.Name(), "package.json") {
 				return nil
 			}
@@ -199,6 +200,29 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	var allDeps dependency.Dependencies
 
 	for workspace, pkg := range p.workspacesPkgs {
+		// Añadimos el packageManager como dependencia especial si existe
+		if pkg.packageJson.Manager != "" {
+			matches := packageManagerRegex.FindStringSubmatch(pkg.packageJson.Manager)
+			if len(matches) == 4 {
+				prefix := matches[1]
+				name := matches[2]
+				version := matches[3]
+
+				// Formateamos la versión de acuerdo al prefijo para que se procese correctamente
+				formattedVersion := version
+				if prefix != "" {
+					formattedVersion = prefix + version
+				}
+
+				d, err := dependency.NewDependency(name, formattedVersion, packageJSONConstants.PackageManager, workspace)
+				if err == nil {
+					// Guardamos el prefijo original como metadato para restaurarlo después
+					d.PackageNamePrefix = prefix
+					allDeps = append(allDeps, d)
+				}
+			}
+		}
+
 		for name, version := range pkg.packageJson.Dependencies {
 			d, err := dependency.NewDependency(name, version, "prod", workspace)
 			if err != nil {
@@ -352,12 +376,24 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	depSections := map[string]string{
-		"prod": "dependencies",
-		"dev":  "devDependencies",
-		"peer": "peerDependencies",
+		"prod": packageJSONConstants.Dependencies,
+		"dev":  packageJSONConstants.DevDependencies,
+		"peer": packageJSONConstants.Dependencies,
 	}
 
 	for _, dep := range updatedDeps {
+		if dep.Env == packageJSONConstants.PackageManager {
+			// Manejo especial para el campo packageManager
+			prefix := ""
+			if dep.PackageNamePrefix != "" {
+				prefix = dep.PackageNamePrefix
+			}
+			// Formateamos el packageManager con el formato correcto: name@version con el prefijo preservado
+			packageManagerValue := fmt.Sprintf("%s%s@%s", prefix, dep.PackageName, dep.NextVersion.String())
+			orderedJSON.Set(packageJSONConstants.PackageManager, packageManagerValue)
+			continue
+		}
+
 		section, ok := depSections[dep.Env]
 		if !ok {
 			continue
