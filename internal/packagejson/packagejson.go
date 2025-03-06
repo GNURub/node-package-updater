@@ -16,6 +16,7 @@ import (
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/dependency"
+	"github.com/GNURub/node-package-updater/internal/gitignore"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/ui"
 	"github.com/GNURub/node-package-updater/internal/updater"
@@ -135,9 +136,26 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 			pkg.workspacesPkgs[workspacePath] = workspacePkg
 		}
 	} else if pkg.depth > 0 {
-		filepath.Walk(filepath.Dir(pkg.Dir), func(path string, file fs.FileInfo, err error) error {
+		base := filepath.Dir(pkg.Dir)
+
+		// Cargar .gitignore si existe
+		gitignoreMatcher, err := gitignore.NewMatcher(base)
+		if err != nil {
+			// Continuar sin gitignore si hay un error al cargarlo
+			fmt.Printf("Warning: Error loading .gitignore: %v\n", err)
+		}
+
+		filepath.Walk(base, func(path string, file fs.FileInfo, err error) error {
 			if err != nil {
 				return err
+			}
+
+			// Ignorar archivos/directorios según gitignore
+			if gitignoreMatcher != nil && gitignoreMatcher.ShouldIgnore(path) {
+				if file.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
 			}
 
 			// check depth of the directory
