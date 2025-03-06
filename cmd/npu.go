@@ -7,6 +7,7 @@ import (
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
+	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/styles"
 	"github.com/spf13/cobra"
 )
@@ -66,7 +67,7 @@ func Exec() error {
 		}
 
 		if flags.PackageManager != "" {
-			options = append(options, packagejson.WithPackageManager(flags.PackageManager))
+			options = append(options, packagejson.WithPackageManager(packagemanager.GetPackageManager(flags.PackageManager)))
 		}
 
 		if flags.WithWorkspaces {

@@ -48,9 +48,9 @@ type PackageJSON struct {
 	}
 }
 
-func WithPackageManager(manager string) Option {
+func WithPackageManager(packagemanager *packagemanager.PackageManager) Option {
 	return func(s *PackageJSON) error {
-		s.packageJson.Manager = manager
+		s.PackageManager = packagemanager
 
 		return nil
 	}
@@ -121,7 +121,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 			}
 
 			options := []Option{
-				WithPackageManager(pkg.packageJson.Manager),
+				WithPackageManager(pkg.PackageManager),
 				WithCache(pkg.cache),
 			}
 
@@ -177,7 +177,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 
 			workspacePkg, err := LoadPackageJSON(
 				fileDir,
-				WithPackageManager(pkg.packageJson.Manager),
+				WithPackageManager(pkg.PackageManager),
 				WithCache(pkg.cache),
 			)
 
