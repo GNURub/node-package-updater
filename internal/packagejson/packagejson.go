@@ -158,6 +158,11 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				return err
 			}
 
+			// comprobamos si ya existe el workspace
+			if _, ok := pkg.workspacesPkgs[filepath.Dir(path)]; ok {
+				return filepath.SkipDir
+			}
+
 			// Ignorar archivos/directorios según gitignore
 			if gitignoreMatcher != nil && gitignoreMatcher.ShouldIgnore(path) {
 				if file.IsDir() {
@@ -188,13 +193,13 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				return err
 			}
 
-			pkg.workspacesPkgs[workspacePkg.Dir] = workspacePkg
+			pkg.workspacesPkgs[filepath.Dir(workspacePkg.Dir)] = workspacePkg
 
 			return nil
 		})
 	}
 
-	pkg.workspacesPkgs[pkg.Dir] = pkg
+	pkg.workspacesPkgs[filepath.Dir(pkg.Dir)] = pkg
 
 	return pkg, nil
 }
