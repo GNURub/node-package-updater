@@ -91,6 +91,10 @@ func WithDepth(depth uint8) Option {
 }
 
 func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
+	if !strings.HasSuffix(dir, string(os.PathSeparator)) {
+		dir = dir + string(os.PathSeparator)
+	}
+
 	pkg := &PackageJSON{
 		Dir: dir,
 	}
@@ -151,23 +155,28 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 			fmt.Printf("Warning: Error loading .gitignore: %v\n", err)
 		}
 
-		filepath.Walk(pkg.Dir, func(path string, file fs.FileInfo, err error) error {
-			if err != nil {
+		filepath.WalkDir(pkg.Dir, func(path string, file fs.DirEntry, err error) error {
+			if err != nil && !errors.Is(err, filepath.SkipDir) {
 				return err
 			}
 
-			fileDir := filepath.Dir(path)
+			if !file.IsDir() || pkg.Dir == path {
+				return nil
+			}
 
 			// comprobamos si ya existe el workspace
-			if _, ok := pkg.workspacesPkgs[fileDir]; ok {
-				return filepath.SkipDir
+			if _, ok := pkg.workspacesPkgs[path]; ok {
+				return nil
+			}
+
+			// Comprobamos si el directorio tiene un package.json
+			_, err = os.Stat(filepath.Join(path, "package.json"))
+			if err != nil {
+				return nil
 			}
 
 			// Ignorar archivos/directorios según gitignore
 			if gitignoreMatcher != nil && gitignoreMatcher.ShouldIgnore(path) {
-				if file.IsDir() {
-					return filepath.SkipDir
-				}
 				return nil
 			}
 
@@ -177,18 +186,14 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				return filepath.SkipDir
 			}
 
-			if !strings.Contains(file.Name(), "package.json") {
-				return nil
-			}
-
 			workspacePkg, err := LoadPackageJSON(
-				fileDir,
+				path,
 				WithPackageManager(pkg.PackageManager),
 				WithCache(pkg.cache),
 			)
 
 			if err != nil {
-				return err
+				return nil
 			}
 
 			pkg.workspacesPkgs[workspacePkg.Dir] = workspacePkg

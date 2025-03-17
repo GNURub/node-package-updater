@@ -64,11 +64,12 @@ Flags:
 
 ## Benchmarks
 
-| Command     |      Mean [ms] | Min [ms] | Max [ms] |    Relative |
-| :---------- | -------------: | -------: | -------: | ----------: |
-| `npu -x -n` |  851.7 ± 194.2 |    699.7 |   1320.8 |        1.00 |
-| `ncu -u`    | 2572.8 ± 292.2 |   2227.6 |   3065.2 | 3.02 ± 0.77 |
+| Command     |      Mean [ms] | Min [ms] | Max [ms] |     Relative |
+| :---------- | -------------: | -------: | -------: | -----------: |
+| `npu -x -n` |    168.7 ± 5.3 |    161.6 |    178.2 |         1.00 |
+| `ncu -u`    | 3058.2 ± 222.5 |   2836.7 |   3492.8 | 18.13 ± 1.44 |
 
 ### Summary
 
-npu -x -n ran 3.22 ± 1.14 times faster than ncu -u
+npu -x -n ran
+18.13 ± 1.44 times faster than ncu -u

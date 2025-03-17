@@ -100,6 +100,10 @@ func (m *Matcher) ShouldIgnore(path string) bool {
 	for _, p := range m.patterns {
 		if match(relPath, p.pattern) {
 			ignored = !p.isNegated
+
+			if ignored {
+				break
+			}
 		}
 	}
 
@@ -112,9 +116,12 @@ func match(path, pattern string) bool {
 	// Manejar patrones con comodines y otras características de gitignore
 
 	// Verificar si el patrón termina con "/"
-	if strings.HasSuffix(pattern, "/") {
+	if strings.HasSuffix(pattern, string(os.PathSeparator)) {
+		if !strings.HasSuffix(path, string(os.PathSeparator)) {
+			path += string(os.PathSeparator)
+		}
 		// Solo coincide con directorios
-		return strings.HasPrefix(path, pattern) || path+"/" == pattern
+		return strings.Contains(path, pattern)
 	}
 
 	// Manejar el caso de coincidencia exacta
