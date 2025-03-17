@@ -91,8 +91,12 @@ func WithDepth(depth uint8) Option {
 }
 
 func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
+	if dir == "" {
+		dir = "."
+	}
+
 	if !strings.HasSuffix(dir, string(os.PathSeparator)) {
-		dir = dir + string(os.PathSeparator)
+		dir += string(os.PathSeparator)
 	}
 
 	pkg := &PackageJSON{
