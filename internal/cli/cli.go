@@ -12,6 +12,7 @@ type Flags struct {
 	DryRun            bool
 	Exclude           []string
 	Filter            string
+	Fix               bool
 	Include           []string
 	KeepRangeOperator bool
 	LogLevel          string
