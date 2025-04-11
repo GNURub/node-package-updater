@@ -16,6 +16,7 @@ var defaultPatterns = []string{
 	".cache/",
 	"coverage/",
 	".DS_Store",
+	".vscode/",
 }
 
 // Matcher representa un conjunto de patrones de gitignore

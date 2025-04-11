@@ -13,6 +13,7 @@ import (
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/constants"
 	"github.com/GNURub/node-package-updater/internal/dependency"
+	"github.com/GNURub/node-package-updater/internal/gitignore"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
 	"github.com/GNURub/node-package-updater/internal/styles"
 )
@@ -164,18 +165,25 @@ func CheckUnusedDependencies(flags *cli.Flags) error {
 	return nil
 }
 
-// findFilesToScan looks for files to analyze in the directory
-func findFilesToScan(rootDir string) ([]string, error) {
+// FindFilesToScan looks for files to analyze in the directory
+// It uses gitignore patterns to skip files that should be ignored
+func FindFilesToScan(rootDir string) ([]string, error) {
 	var files []string
 
-	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
+	// Create a gitignore matcher
+	matcher, err := gitignore.NewMatcher(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("error creating gitignore matcher: %w", err)
+	}
+
+	err = filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip node_modules folder
-		if d.IsDir() && (d.Name() == "node_modules" || strings.HasPrefix(d.Name(), ".")) {
-			return filepath.SkipDir
+		// Skip node_modules folder (as an extra precaution since gitignore should handle this)
+		if matcher.ShouldIgnore(path) || d.IsDir() && (strings.Contains(d.Name(), "node_modules") || strings.HasPrefix(d.Name(), ".")) {
+			return nil
 		}
 
 		// Check if it's a file to analyze
@@ -194,6 +202,11 @@ func findFilesToScan(rootDir string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+// findFilesToScan is an alias for FindFilesToScan, kept for backwards compatibility
+func findFilesToScan(rootDir string) ([]string, error) {
+	return FindFilesToScan(rootDir)
 }
 
 // findUsedDependencies looks for dependencies used in files
@@ -310,6 +323,7 @@ func processJSONObject(obj map[string]interface{}, foundDependencies *[]string, 
 		"extends", "plugins", "presets", "parser", "module",
 		"loader", "use", "require", "import", "dependency",
 		"plugin", "preset", "eslintConfig", "babel", "transform",
+		"scripts",
 	}
 
 	for _, field := range dependencyFields {
