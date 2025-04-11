@@ -1,8 +1,8 @@
-// filepath: /home/gnurub/code/node-package-updater/pkg/checkdeps/checkdeps.go
 package checkdeps
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,15 +11,10 @@ import (
 	"strings"
 
 	"github.com/GNURub/node-package-updater/internal/cli"
+	"github.com/GNURub/node-package-updater/internal/constants"
+	"github.com/GNURub/node-package-updater/internal/dependency"
+	"github.com/GNURub/node-package-updater/internal/packagejson"
 	"github.com/GNURub/node-package-updater/internal/styles"
-)
-
-// Dependency types
-const (
-	DependencyType     = "dependencies"
-	DevDependencyType  = "devDependencies"
-	PeerDependencyType = "peerDependencies"
-	OptDependencyType  = "optionalDependencies"
 )
 
 // File extensions to analyze
@@ -35,6 +30,18 @@ var validExtensions = map[string]bool{
 	".json":   true,
 }
 
+// JavaScript/TypeScript file extensions (excluding JSON)
+var validJSExtensions = map[string]bool{
+	".js":     true,
+	".jsx":    true,
+	".ts":     true,
+	".tsx":    true,
+	".vue":    true,
+	".svelte": true,
+	".mjs":    true,
+	".cjs":    true,
+}
+
 // Patterns to detect imports
 var (
 	// ES6 imports: import xxx from 'package'
@@ -47,16 +54,9 @@ var (
 	requireRegex = regexp.MustCompile(`require\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 )
 
-// PackageJSON represents the structure of the package.json file
-type PackageJSON struct {
-	Dependencies         map[string]string `json:"dependencies"`
-	DevDependencies      map[string]string `json:"devDependencies"`
-	PeerDependencies     map[string]string `json:"peerDependencies"`
-	OptionalDependencies map[string]string `json:"optionalDependencies"`
-}
-
 // CheckResults stores the analysis results
 type CheckResults struct {
+	WorkspacePath         string
 	UnusedDependencies    []string
 	UnusedDevDependencies []string
 	UsedDependencies      map[string][]string
@@ -69,49 +69,96 @@ func CheckUnusedDependencies(flags *cli.Flags) error {
 		baseDir = "."
 	}
 
-	// Read package.json
-	packageJSONPath := filepath.Join(baseDir, "package.json")
-	packageData, err := os.ReadFile(packageJSONPath)
+	// Use packagejson.LoadPackageJSON instead of reading package.json directly
+	options := []packagejson.Option{}
+
+	// Load the package.json with workspaces if needed
+	if flags.WithWorkspaces {
+		options = append(options, packagejson.EnableWorkspaces())
+	}
+
+	if flags.Depth > 0 {
+		options = append(options, packagejson.WithDepth(flags.Depth))
+	}
+
+	pkg, err := packagejson.LoadPackageJSON(baseDir, options...)
 	if err != nil {
-		return fmt.Errorf("error reading package.json: %w", err)
+		return fmt.Errorf("error loading package.json: %w", err)
 	}
 
-	var packageJSON PackageJSON
-	if err := json.Unmarshal(packageData, &packageJSON); err != nil {
-		return fmt.Errorf("error parsing package.json: %w", err)
+	// Process each workspace (or just the main package if no workspaces)
+	var allResults []*CheckResults
+
+	// Track all workspaces to process
+	workspacesMap := make(map[string]*packagejson.PackageJSON)
+
+	// Add the main package
+	workspacesMap[pkg.Dir] = pkg
+
+	// Add all workspaces if they exist
+	for path, workspacePkg := range pkg.WorkspacesPkgs {
+		workspacesMap[path] = workspacePkg
 	}
 
-	// Check if there are dependencies to analyze
-	if len(packageJSON.Dependencies) == 0 && len(packageJSON.DevDependencies) == 0 {
-		fmt.Println("⚠️ No dependencies found in package.json")
-		return nil
+	for workspacePath, workspacePkg := range workspacesMap {
+		// Find all files to scan in this workspace
+		files, err := findFilesToScan(workspacePath)
+		if err != nil {
+			if flags.Verbose {
+				fmt.Printf("⚠️ Error scanning files in workspace %s: %v\n", workspacePath, err)
+			}
+			continue
+		}
+
+		if flags.Verbose {
+			fmt.Printf("📂 Analyzing %d files for dependencies in %s\n", len(files), workspacePath)
+		}
+
+		// Analyze files and find used dependencies
+		usedPackages, err := findUsedDependencies(files, flags.Verbose)
+		if err != nil {
+			if flags.Verbose {
+				fmt.Printf("⚠️ Error finding used dependencies in workspace %s: %v\n", workspacePath, err)
+			}
+			continue
+		}
+
+		// Get dependencies from package.json structure
+		deps := make(map[string]string)
+		devDeps := make(map[string]string)
+		peerDeps := make(map[string]string)
+		optDeps := make(map[string]string)
+
+		// Determine dependencies based on what's available in the package.json
+		if len(workspacePkg.PackageJson.Dependencies) > 0 {
+			deps = workspacePkg.PackageJson.Dependencies
+		}
+
+		if len(workspacePkg.PackageJson.DevDependencies) > 0 {
+			devDeps = workspacePkg.PackageJson.DevDependencies
+		}
+
+		if len(workspacePkg.PackageJson.PeerDependencies) > 0 {
+			peerDeps = workspacePkg.PackageJson.PeerDependencies
+		}
+
+		if len(workspacePkg.PackageJson.OptionalDependencies) > 0 {
+			optDeps = workspacePkg.PackageJson.OptionalDependencies
+		}
+
+		// Determine which dependencies are not being used
+		results := analyzePackageDependencies(deps, devDeps, peerDeps, optDeps, usedPackages)
+		results.WorkspacePath = workspacePath
+
+		// Show results for this workspace
+		printWorkspaceResults(results, workspacePath, flags.Verbose)
+
+		allResults = append(allResults, results)
 	}
-
-	// Find all files to scan
-	files, err := findFilesToScan(baseDir)
-	if err != nil {
-		return err
-	}
-
-	if flags.Verbose {
-		fmt.Printf("📂 Analyzing %d files for dependencies\n", len(files))
-	}
-
-	// Analyze files and find used dependencies
-	usedPackages, err := findUsedDependencies(files, flags.Verbose)
-	if err != nil {
-		return err
-	}
-
-	// Determine which dependencies are not being used
-	results := analyzeResults(packageJSON, usedPackages)
-
-	// Show results
-	printResults(results, flags.Verbose)
 
 	// If fix option is specified, remove unused dependencies
 	if flags.Fix {
-		return removeDependencies(packageJSONPath, results, flags)
+		return fixUnusedDependencies(pkg, allResults, flags)
 	}
 
 	return nil
@@ -154,43 +201,60 @@ func findUsedDependencies(files []string, verbose bool) (map[string][]string, er
 	usedPackages := make(map[string][]string)
 
 	for _, file := range files {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("error reading file %s: %w", file, err)
-		}
-
-		contentStr := string(content)
 		ext := filepath.Ext(file)
 
-		var imports []string
-
-		// Process the file according to its extension
 		if ext == ".json" {
+			// For JSON files, use the existing JSON analyzer
+			content, err := os.ReadFile(file)
+			if err != nil {
+				return nil, fmt.Errorf("error reading file %s: %w", file, err)
+			}
+
 			// Analyze JSON file to find package references
 			jsonImports, err := findDependenciesInJSON(content, verbose)
 			if err != nil && verbose {
 				fmt.Printf("⚠️ Error analyzing JSON in %s: %v\n", file, err)
+				continue
 			}
-			imports = append(imports, jsonImports...)
-		} else {
-			// Look for all imports in JS/TS files
-			imports = findAllImports(contentStr)
-		}
 
-		for _, importName := range imports {
-			// Normalize package name
-			packageName := normalizePackageName(importName)
+			// Process JSON imports
+			for _, importName := range jsonImports {
+				// Normalize package name
+				packageName := normalizePackageName(importName)
 
-			if packageName != "" {
+				if packageName != "" {
+					relPath, err := filepath.Rel(".", file)
+					if err != nil {
+						relPath = file
+					}
+
+					usedPackages[packageName] = append(usedPackages[packageName], relPath)
+
+					if verbose {
+						fmt.Printf("📦 Dependency '%s' found in JSON file %s\n", packageName, relPath)
+					}
+				}
+			}
+
+		} else if validJSExtensions[ext] {
+			// For JS/TS files, use the new esbuild-based extractor
+			// This handles JS, TS, JSX, TSX, MJS, CJS, etc.
+			deps, err := ExtractDependencies(file, verbose)
+			if err != nil && verbose {
+				fmt.Printf("⚠️ Error analyzing JS/TS file %s: %v\n", file, err)
+				continue
+			}
+
+			for _, dep := range deps {
 				relPath, err := filepath.Rel(".", file)
 				if err != nil {
 					relPath = file
 				}
 
-				usedPackages[packageName] = append(usedPackages[packageName], relPath)
+				usedPackages[dep] = append(usedPackages[dep], relPath)
 
 				if verbose {
-					fmt.Printf("📦 Dependency '%s' found in %s\n", packageName, relPath)
+					fmt.Printf("📦 Dependency '%s' found in %s\n", dep, relPath)
 				}
 			}
 		}
@@ -338,18 +402,18 @@ func normalizePackageName(importPath string) string {
 	return parts[0]
 }
 
-// analyzeResults analyzes the results to determine unused dependencies
-func analyzeResults(packageJSON PackageJSON, usedPackages map[string][]string) *CheckResults {
+// analyzePackageDependencies analyzes dependencies to determine which ones are unused
+func analyzePackageDependencies(deps, devDeps, peerDeps, optDeps map[string]string, usedPackages map[string][]string) *CheckResults {
 	results := &CheckResults{
 		UsedDependencies: usedPackages,
 	}
 
 	// Check production dependencies
-	for dep := range packageJSON.Dependencies {
+	for dep := range deps {
 		if _, ok := usedPackages[dep]; !ok {
 			// Check if it's an optional or peer dependency
-			if _, isOpt := packageJSON.OptionalDependencies[dep]; !isOpt {
-				if _, isPeer := packageJSON.PeerDependencies[dep]; !isPeer {
+			if _, isOpt := optDeps[dep]; !isOpt {
+				if _, isPeer := peerDeps[dep]; !isPeer {
 					results.UnusedDependencies = append(results.UnusedDependencies, dep)
 				}
 			}
@@ -357,7 +421,7 @@ func analyzeResults(packageJSON PackageJSON, usedPackages map[string][]string) *
 	}
 
 	// Check development dependencies
-	for dep := range packageJSON.DevDependencies {
+	for dep := range devDeps {
 		if _, ok := usedPackages[dep]; !ok {
 			results.UnusedDevDependencies = append(results.UnusedDevDependencies, dep)
 		}
@@ -366,9 +430,13 @@ func analyzeResults(packageJSON PackageJSON, usedPackages map[string][]string) *
 	return results
 }
 
-// printResults shows the analysis results
-func printResults(results *CheckResults, verbose bool) {
-	fmt.Println("\n📊 Dependency Analysis:")
+// printWorkspaceResults shows the analysis results for a workspace
+func printWorkspaceResults(results *CheckResults, workspacePath string, verbose bool) {
+	if workspacePath != "." {
+		fmt.Printf("\n📊 Dependency Analysis for workspace: %s\n", workspacePath)
+	} else {
+		fmt.Println("\n📊 Dependency Analysis:")
+	}
 
 	if len(results.UnusedDependencies) > 0 {
 		fmt.Printf("\n🔍 Unused dependencies (%d):\n", len(results.UnusedDependencies))
@@ -400,122 +468,110 @@ func printResults(results *CheckResults, verbose bool) {
 	}
 }
 
-// removeDependencies removes unused dependencies from package.json
-func removeDependencies(packageJSONPath string, results *CheckResults, flags *cli.Flags) error {
-	if len(results.UnusedDependencies) == 0 && len(results.UnusedDevDependencies) == 0 {
+// fixUnusedDependencies removes unused dependencies using packagejson methods
+func fixUnusedDependencies(pkg *packagejson.PackageJSON, results []*CheckResults, flags *cli.Flags) error {
+	if len(results) == 0 {
+		fmt.Println("\n✅ No workspaces to process")
+		return nil
+	}
+
+	modified := false
+
+	// In dry run mode, just show what would be removed
+	if flags.DryRun {
+		for _, result := range results {
+			if len(result.UnusedDependencies) > 0 || len(result.UnusedDevDependencies) > 0 {
+				if result.WorkspacePath != "." {
+					fmt.Printf("\n🔧 Changes for workspace: %s (dry-run)\n", result.WorkspacePath)
+				} else {
+					fmt.Println("\n🔧 Changes (dry-run):")
+				}
+
+				for _, dep := range result.UnusedDependencies {
+					fmt.Printf("  • Would remove dependency: %s\n", dep)
+				}
+
+				for _, dep := range result.UnusedDevDependencies {
+					fmt.Printf("  • Would remove dev dependency: %s\n", dep)
+				}
+
+				modified = true
+			}
+		}
+
+		if modified {
+			fmt.Println(styles.SuccessStyle.Render("\n⚠️ Dry-run mode: No changes made to package.json"))
+		} else {
+			fmt.Println("\n✅ No unused dependencies to remove")
+		}
+
+		return nil
+	}
+
+	// Create a map of dependencies to update for each workspace
+	depsByWorkspace := make(map[string]dependency.Dependencies)
+
+	for _, result := range results {
+		if len(result.UnusedDependencies) > 0 || len(result.UnusedDevDependencies) > 0 {
+			var deps dependency.Dependencies
+
+			// Mark production dependencies for removal (setting next version to empty string)
+			for _, depName := range result.UnusedDependencies {
+				d, err := dependency.NewDependency(depName, "", constants.Dependencies, result.WorkspacePath)
+				if err != nil {
+					continue
+				}
+				d.NextVersion = nil // This will signal removal
+				d.HaveToUpdate = true
+				deps = append(deps, d)
+				fmt.Printf("🗑️ Marking for removal: %s (dependency)\n", depName)
+			}
+
+			// Mark dev dependencies for removal
+			for _, depName := range result.UnusedDevDependencies {
+				d, err := dependency.NewDependency(depName, "", constants.DevDependencies, result.WorkspacePath)
+				if err != nil {
+					continue
+				}
+				d.NextVersion = nil // This will signal removal
+				d.HaveToUpdate = true
+				deps = append(deps, d)
+				fmt.Printf("🗑️ Marking for removal: %s (dev dependency)\n", depName)
+			}
+
+			if len(deps) > 0 {
+				depsByWorkspace[result.WorkspacePath] = deps
+				modified = true
+			}
+		}
+	}
+
+	if !modified {
 		fmt.Println("\n✅ No unused dependencies to remove")
 		return nil
 	}
 
-	// Read package.json
-	data, err := os.ReadFile(packageJSONPath)
-	if err != nil {
-		return fmt.Errorf("could not read package.json: %w", err)
-	}
-
-	var packageJSON map[string]interface{}
-	if err := json.Unmarshal(data, &packageJSON); err != nil {
-		return fmt.Errorf("error parsing package.json: %w", err)
-	}
-
-	// Remove unused dependencies
-	modified := false
-
-	if deps, ok := packageJSON["dependencies"].(map[string]interface{}); ok && len(results.UnusedDependencies) > 0 {
-		for _, dep := range results.UnusedDependencies {
-			if _, exists := deps[dep]; exists {
-				delete(deps, dep)
-				modified = true
-				fmt.Printf("🗑️ Removing unused dependency: %s\n", dep)
+	// Update package.json files for each workspace
+	allError := true
+	for workspace, workspacePkg := range pkg.WorkspacesPkgs {
+		if deps, ok := depsByWorkspace[workspace]; ok {
+			// Use the PackageJSON's UpdatePackageJSON method
+			if err := workspacePkg.UpdatePackageJSON(flags, deps); err != nil {
+				fmt.Printf("⚠️ Error updating package.json in %s: %v\n", workspace, err)
+			} else {
+				fmt.Printf("✅ Successfully removed unused dependencies in %s\n", workspace)
+				if allError {
+					allError = false
+				}
 			}
 		}
-		packageJSON["dependencies"] = deps
 	}
 
-	if devDeps, ok := packageJSON["devDependencies"].(map[string]interface{}); ok && len(results.UnusedDevDependencies) > 0 {
-		for _, dep := range results.UnusedDevDependencies {
-			if _, exists := devDeps[dep]; exists {
-				delete(devDeps, dep)
-				modified = true
-				fmt.Printf("🗑️ Removing unused development dependency: %s\n", dep)
-			}
-		}
-		packageJSON["devDependencies"] = devDeps
+	if allError && modified {
+		return errors.New("failed to update package.json files")
 	}
 
-	if !modified {
-		return nil
-	}
-
-	// If in "dry run" mode, don't modify the file
-	if flags.DryRun {
-		fmt.Println(styles.SuccessStyle.Render("\n⚠️ Dry-run mode: No changes made to package.json"))
-		return nil
-	}
-
-	// Save the modified package.json
-	updatedData, err := json.MarshalIndent(packageJSON, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error serializing package.json: %w", err)
-	}
-
-	if err := os.WriteFile(packageJSONPath, updatedData, 0644); err != nil {
-		return fmt.Errorf("error writing package.json: %w", err)
-	}
-
-	fmt.Println(styles.SuccessStyle.Render("\n✅ Unused dependencies removed from package.json"))
-
-	// Reinstall dependencies if --noInstall wasn't specified
-	if !flags.NoInstall {
-		return reinstallDependencies(filepath.Dir(packageJSONPath), flags)
-	}
+	fmt.Println(styles.SuccessStyle.Render("\n✅ Unused dependencies removed successfully"))
 
 	return nil
-}
-
-// reinstallDependencies reinstalls project dependencies
-func reinstallDependencies(baseDir string, flags *cli.Flags) error {
-	fmt.Println("\n📦 Reinstalling dependencies...")
-
-	// Detect package manager
-	packageManager := detectPackageManager(baseDir)
-
-	var cmd string
-	switch packageManager {
-	case "yarn":
-		cmd = "yarn install"
-	case "pnpm":
-		cmd = "pnpm install"
-	case "bun":
-		cmd = "bun install"
-	default:
-		cmd = "npm install"
-	}
-
-	// Run installation command
-	if flags.Verbose {
-		fmt.Printf("🔄 Running: %s\n", cmd)
-	}
-
-	fmt.Println(styles.SuccessStyle.Render("\n✅ Manually run '" + cmd + "' to update your node_modules"))
-
-	return nil
-}
-
-// detectPackageManager detects the package manager used
-func detectPackageManager(baseDir string) string {
-	// Check lock files to determine the package manager
-	if _, err := os.Stat(filepath.Join(baseDir, "yarn.lock")); err == nil {
-		return "yarn"
-	}
-
-	if _, err := os.Stat(filepath.Join(baseDir, "pnpm-lock.yaml")); err == nil {
-		return "pnpm"
-	}
-
-	if _, err := os.Stat(filepath.Join(baseDir, "bun.lock")); err == nil {
-		return "bun"
-	}
-
-	return "npm"
 }

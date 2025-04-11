@@ -35,16 +35,17 @@ type PackageJSON struct {
 	packageFilePath   string
 	Dir               string
 	PackageManager    *packagemanager.PackageManager
-	workspacesPkgs    map[string]*PackageJSON
+	WorkspacesPkgs    map[string]*PackageJSON
 	processWorkspaces bool
 	depth             uint8
 	cache             *cache.Cache
-	packageJson       struct {
-		Manager          string            `json:"packageManager,omitempty"`
-		Dependencies     map[string]string `json:"dependencies,omitempty"`
-		DevDependencies  map[string]string `json:"devDependencies,omitempty"`
-		PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
-		Workspaces       []string          `json:"workspaces,omitempty"`
+	PackageJson       struct {
+		Manager              string            `json:"packageManager,omitempty"`
+		Dependencies         map[string]string `json:"dependencies,omitempty"`
+		DevDependencies      map[string]string `json:"devDependencies,omitempty"`
+		PeerDependencies     map[string]string `json:"peerDependencies,omitempty"`
+		OptionalDependencies map[string]string `json:"optionalDependencies,omitempty"`
+		Workspaces           []string          `json:"workspaces,omitempty"`
 	}
 }
 
@@ -107,15 +108,15 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	data, err := os.ReadFile(fullPackageJSONPath)
 	if err == nil {
 		pkg.packageFilePath = fullPackageJSONPath
-		if err := json.Unmarshal(data, &pkg.packageJson); err != nil {
+		if err := json.Unmarshal(data, &pkg.PackageJson); err != nil {
 			return nil, err
 		}
 	}
 
-	pkg.workspacesPkgs = make(map[string]*PackageJSON)
+	pkg.WorkspacesPkgs = make(map[string]*PackageJSON)
 
 	if pkg.PackageManager == nil {
-		pkg.PackageManager = packagemanager.Detect(pkg.Dir, pkg.packageJson.Manager)
+		pkg.PackageManager = packagemanager.Detect(pkg.Dir, pkg.PackageJson.Manager)
 	}
 
 	for _, opt := range opts {
@@ -125,9 +126,9 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	}
 
 	if pkg.processWorkspaces {
-		workspacesPaths := pkg.PackageManager.GetWorkspacesPaths(pkg.Dir, pkg.packageJson.Workspaces)
+		workspacesPaths := pkg.PackageManager.GetWorkspacesPaths(pkg.Dir, pkg.PackageJson.Workspaces)
 		for _, workspacePath := range workspacesPaths {
-			if _, ok := pkg.workspacesPkgs[workspacePath]; ok {
+			if _, ok := pkg.WorkspacesPkgs[workspacePath]; ok {
 				continue
 			}
 
@@ -149,7 +150,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				continue
 			}
 
-			pkg.workspacesPkgs[workspacePath] = workspacePkg
+			pkg.WorkspacesPkgs[workspacePath] = workspacePkg
 		}
 	} else if pkg.depth > 0 {
 		// Cargar .gitignore si existe
@@ -169,7 +170,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 			}
 
 			// comprobamos si ya existe el workspace
-			if _, ok := pkg.workspacesPkgs[path]; ok {
+			if _, ok := pkg.WorkspacesPkgs[path]; ok {
 				return nil
 			}
 
@@ -200,13 +201,13 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 				return nil
 			}
 
-			pkg.workspacesPkgs[workspacePkg.Dir] = workspacePkg
+			pkg.WorkspacesPkgs[workspacePkg.Dir] = workspacePkg
 
 			return nil
 		})
 	}
 
-	pkg.workspacesPkgs[pkg.Dir] = pkg
+	pkg.WorkspacesPkgs[pkg.Dir] = pkg
 
 	return pkg, nil
 }
@@ -214,10 +215,10 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	var allDeps dependency.Dependencies
 
-	for workspace, pkg := range p.workspacesPkgs {
+	for workspace, pkg := range p.WorkspacesPkgs {
 		// Añadimos el packageManager como dependencia especial si existe
-		if pkg.packageJson.Manager != "" {
-			matches := packageManagerRegex.FindStringSubmatch(pkg.packageJson.Manager)
+		if pkg.PackageJson.Manager != "" {
+			matches := packageManagerRegex.FindStringSubmatch(pkg.PackageJson.Manager)
 			if len(matches) == 4 {
 				prefix := matches[1]
 				name := matches[2]
@@ -238,7 +239,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 			}
 		}
 
-		for name, version := range pkg.packageJson.Dependencies {
+		for name, version := range pkg.PackageJson.Dependencies {
 			d, err := dependency.NewDependency(name, version, constants.Dependencies, workspace)
 			if err != nil {
 				continue
@@ -247,7 +248,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 
 		if !flags.Production {
-			for name, version := range p.packageJson.DevDependencies {
+			for name, version := range p.PackageJson.DevDependencies {
 				d, err := dependency.NewDependency(name, version, constants.DevDependencies, workspace)
 				if err != nil {
 					continue
@@ -256,7 +257,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 			}
 
 			if flags.PeerDependencies {
-				for name, version := range p.packageJson.PeerDependencies {
+				for name, version := range p.PackageJson.PeerDependencies {
 					d, err := dependency.NewDependency(name, version, constants.PeerDependencies, workspace)
 					if err != nil {
 						continue
@@ -280,9 +281,9 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	}
 
 	allError := true
-	for workspace, pkg := range p.workspacesPkgs {
+	for workspace, pkg := range p.WorkspacesPkgs {
 		if deps, ok := depsByWorkspace[workspace]; ok {
-			err := pkg.updatePackageJSON(flags, deps)
+			err := pkg.UpdatePackageJSON(flags, deps)
 			if err == nil && allError {
 				allError = false
 			}
@@ -378,7 +379,7 @@ func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache
 	return depsByWorkspace, nil
 }
 
-func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency.Dependencies) error {
+func (p *PackageJSON) UpdatePackageJSON(flags *cli.Flags, updatedDeps dependency.Dependencies) error {
 	var orderedJSON orderedmap.OrderedMap
 	orderedJSON.SetEscapeHTML(false)
 	originalData, err := os.ReadFile(p.packageFilePath)
@@ -391,7 +392,7 @@ func (p *PackageJSON) updatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	for _, dep := range updatedDeps {
-		if dep.Env == constants.PackageManager && p.packageJson.Manager != "" {
+		if dep.Env == constants.PackageManager && p.PackageJson.Manager != "" {
 			// Manejo especial para el campo packageManager
 			prefix := ""
 			if dep.PackageNamePrefix != "" {
