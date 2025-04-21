@@ -9,7 +9,7 @@ import (
 )
 
 func UpdateGlobalDependencies(flags *cli.Flags) error {
-	pm := packagemanager.GetPackageManager(flags.PackageManager)
+	pm := packagemanager.Detect("", flags.PackageManager)
 
 	globalDeps, err := pm.GetGlobalDeps()
 
@@ -18,7 +18,7 @@ func UpdateGlobalDependencies(flags *cli.Flags) error {
 	}
 
 	// Actualizamos las dependencias
-	dependencies, err := packagejson.UpdateDependencies(globalDeps, flags, nil)
+	dependencies, _ := packagejson.UpdateDependencies(globalDeps, flags, nil)
 
 	if len(dependencies["global"]) == 0 {
 		fmt.Println("🎉! All global dependencies updated successfully!")

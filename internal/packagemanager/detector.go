@@ -95,23 +95,6 @@ func (p *PackageManager) GetWorkspacesPaths(dir string, pkgJsonWorkspaces []stri
 	return workspacePaths
 }
 
-func GetPackageManager(manager string) *PackageManager {
-	switch manager {
-	case "bun":
-		return Bun
-	case "yarn":
-		return Yarn
-	case "pnpm":
-		return Pnpm
-	case "deno":
-		return Deno
-	case "npm":
-		return Npm
-	default:
-		return Npm
-	}
-}
-
 func Detect(projectPath, manager string) *PackageManager {
 	if manager != "" {
 		for _, pm := range SupportedPackageManagers {
@@ -119,17 +102,51 @@ func Detect(projectPath, manager string) *PackageManager {
 				return pm
 			}
 		}
+	} else {
+		userAgent := os.Getenv("npm_config_user_agent")
+		execpath := os.Getenv("npm_execpath")
+
+		// Check for Bun first (less reliable in Go compared to JS, might need refinement)
+		// Simple check based on user agent or execpath for now
+		if strings.HasPrefix(userAgent, "bun/") || strings.Contains(execpath, "bun") {
+			// Verify bun executable exists as a fallback check
+			if _, err := exec.LookPath("bun"); err == nil {
+				return Bun
+			}
+		}
+		if strings.HasPrefix(userAgent, "yarn/") || strings.Contains(execpath, "yarn") {
+			// Verify yarn executable exists
+			if _, err := exec.LookPath("yarn"); err == nil {
+				return Yarn
+			}
+		}
+		if strings.HasPrefix(userAgent, "pnpm/") || strings.Contains(execpath, "pnpm") {
+			// Verify pnpm executable exists
+			if _, err := exec.LookPath("pnpm"); err == nil {
+				return Pnpm
+			}
+		}
 	}
 
+	// Fallback to lockfile detection
 	for _, pm := range SupportedPackageManagers {
+		// Check if the command exists first, regardless of lockfile,
+		// as the user might be in a directory without a lockfile but still wants to use a specific manager.
 		_, cmdExists := exec.LookPath(pm.Name)
 		if cmdExists != nil {
 			continue
 		}
 
-		for _, lockFile := range pm.LockFiles {
-			if _, err := os.Stat(filepath.Join(projectPath, lockFile)); err == nil {
-				return pm
+		if projectPath != "" {
+			for _, lockFile := range pm.LockFiles {
+				if _, err := os.Stat(filepath.Join(projectPath, lockFile)); err == nil {
+					// Ensure the command for the detected lockfile actually exists
+					if _, err := exec.LookPath(pm.Name); err == nil {
+						return pm
+					}
+					// If command doesn't exist, continue searching (e.g., yarn.lock exists but yarn isn't installed)
+					break // Move to the next package manager check
+				}
 			}
 		}
 	}

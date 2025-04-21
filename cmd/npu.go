@@ -67,7 +67,7 @@ func Exec() error {
 		}
 
 		if flags.PackageManager != "" {
-			options = append(options, packagejson.WithPackageManager(packagemanager.GetPackageManager(flags.PackageManager)))
+			options = append(options, packagejson.WithPackageManager(packagemanager.Detect("", flags.PackageManager)))
 		}
 
 		if flags.WithWorkspaces {
