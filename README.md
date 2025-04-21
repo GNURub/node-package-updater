@@ -28,6 +28,7 @@ Usage:
   npu [command]
 
 Available Commands:
+  checkdeps   Check unused dependencies in the project
   completion  Generate the autocompletion script for the specified shell
   global      Global dependencies update
   help        Help about any command
@@ -37,6 +38,7 @@ Available Commands:
 Flags:
   -C, --cleanCache              Clean cache
   -c, --config string           Path to config file (default: .npmrc)
+      --cpus int                Number of CPUs to use for parallel processing (default 16)
       --depth uint8             Multi-repo update depth
   -d, --dir string              Root directory for package search
   -D, --dryRun                  Show what would be updated without making changes
