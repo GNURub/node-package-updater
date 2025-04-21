@@ -1,4 +1,3 @@
-// filepath: /home/gnurub/code/node-package-updater/cmd/checkdeps.go
 package cmd
 
 import (

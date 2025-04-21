@@ -78,13 +78,13 @@ func (p *PackageManager) GetWorkspacesPaths(dir string, pkgJsonWorkspaces []stri
 
 	var workspacePaths []string
 	for _, workspace := range pkgJsonWorkspaces {
-		matches, err := filepath.Glob(workspace)
+		matches, err := filepath.Glob(filepath.Join(dir, workspace))
 		if err != nil {
 			continue
 		}
 
 		for _, match := range matches {
-			packageJSONPath := filepath.Join(dir, match, "package.json")
+			packageJSONPath := filepath.Join(match, "package.json")
 
 			if fileInfo, err := os.Stat(packageJSONPath); err == nil && !fileInfo.IsDir() {
 				workspacePaths = append(workspacePaths, filepath.Dir(packageJSONPath))
