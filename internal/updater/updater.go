@@ -21,6 +21,12 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 	sem := make(chan struct{}, numWorkers)
 	var wg sync.WaitGroup
 
+	go func() {
+		wg.Wait()
+		close(processed)
+		close(currentPackage)
+	}()
+
 	for _, dep := range deps {
 		sem <- struct{}{}
 		wg.Add(1)
@@ -34,10 +40,15 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(flags.Timeout))
 			defer cancel()
 
-			currentPackage <- dep.PackageName
+			select {
+			case currentPackage <- dep.PackageName:
+			default:
+			}
 			dep.FetchNewVersion(ctx, flags, cache)
-
-			processed <- true
+			select {
+			case processed <- true:
+			default:
+			}
 		}(dep)
 	}
 	wg.Wait()

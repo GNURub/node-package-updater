@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/constants"
@@ -213,62 +214,87 @@ func findFilesToScan(rootDir string) ([]string, error) {
 func findUsedDependencies(files []string, verbose bool) (map[string][]string, error) {
 	usedPackages := make(map[string][]string)
 
-	for _, file := range files {
-		ext := filepath.Ext(file)
+	// Mejorar rendimiento: procesar archivos en paralelo con un pool de workers
+	type result struct {
+		dep  string
+		file string
+		err  error
+		isJS bool
+	}
 
-		if ext == ".json" {
-			// For JSON files, use the existing JSON analyzer
-			content, err := os.ReadFile(file)
-			if err != nil {
-				return nil, fmt.Errorf("error reading file %s: %w", file, err)
-			}
+	workerCount := 8 // Número de workers, ajustable según CPU
+	jobs := make(chan string, len(files))
+	results := make(chan result, len(files)*3) // Puede haber varios deps por archivo
+	var wg sync.WaitGroup
 
-			// Analyze JSON file to find package references
-			jsonImports, err := findDependenciesInJSON(content, verbose)
-			if err != nil && verbose {
-				fmt.Printf("⚠️ Error analyzing JSON in %s: %v\n", file, err)
-				continue
-			}
-
-			// Process JSON imports
-			for _, importName := range jsonImports {
-				// Normalize package name
-				packageName := normalizePackageName(importName)
-
-				if packageName != "" {
-					relPath, err := filepath.Rel(".", file)
-					if err != nil {
-						relPath = file
-					}
-
-					usedPackages[packageName] = append(usedPackages[packageName], relPath)
-
-					if verbose {
-						fmt.Printf("📦 Dependency '%s' found in JSON file %s\n", packageName, relPath)
-					}
-				}
-			}
-
-		} else if validJSExtensions[ext] {
-			// For JS/TS files, use the new esbuild-based extractor
-			// This handles JS, TS, JSX, TSX, MJS, CJS, etc.
-			deps, err := ExtractDependencies(file, verbose)
-			if err != nil && verbose {
-				fmt.Printf("⚠️ Error analyzing JS/TS file %s: %v\n", file, err)
-				continue
-			}
-
-			for _, dep := range deps {
-				relPath, err := filepath.Rel(".", file)
+	// Worker para procesar archivos
+	worker := func() {
+		defer wg.Done()
+		for file := range jobs {
+			ext := filepath.Ext(file)
+			if ext == ".json" {
+				content, err := os.ReadFile(file)
 				if err != nil {
-					relPath = file
+					results <- result{"", file, err, false}
+					continue
 				}
-
-				usedPackages[dep] = append(usedPackages[dep], relPath)
-
-				if verbose {
-					fmt.Printf("📦 Dependency '%s' found in %s\n", dep, relPath)
+				jsonImports, err := findDependenciesInJSON(content, verbose)
+				if err != nil && verbose {
+					fmt.Printf("⚠️ Error analyzing JSON in %s: %v\n", file, err)
+					continue
 				}
+				for _, importName := range jsonImports {
+					packageName := normalizePackageName(importName)
+					if packageName != "" {
+						results <- result{packageName, file, nil, false}
+					}
+				}
+			} else if validJSExtensions[ext] {
+				deps, err := ExtractDependencies(file, verbose)
+				if err != nil && verbose {
+					fmt.Printf("⚠️ Error analyzing JS/TS file %s: %v\n", file, err)
+					continue
+				}
+				for _, dep := range deps {
+					results <- result{dep, file, nil, true}
+				}
+			}
+		}
+	}
+
+	// Lanzar workers
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go worker()
+	}
+
+	// Enviar trabajos
+	for _, file := range files {
+		jobs <- file
+	}
+	close(jobs)
+
+	// Esperar a que terminen los workers en un goroutine
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Recoger resultados
+	for res := range results {
+		if res.err != nil {
+			continue
+		}
+		relPath, err := filepath.Rel(".", res.file)
+		if err != nil {
+			relPath = res.file
+		}
+		usedPackages[res.dep] = append(usedPackages[res.dep], relPath)
+		if verbose {
+			if res.isJS {
+				fmt.Printf("📦 Dependency '%s' found in %s\n", res.dep, relPath)
+			} else {
+				fmt.Printf("📦 Dependency '%s' found in JSON file %s\n", res.dep, relPath)
 			}
 		}
 	}
@@ -399,20 +425,19 @@ func findAllImports(content string) []string {
 
 // normalizePackageName extracts the base name of the package
 func normalizePackageName(importPath string) string {
-	// Ignore relative imports
+	// Ignorar imports relativos y absolutos
 	if strings.HasPrefix(importPath, ".") || strings.HasPrefix(importPath, "/") {
 		return ""
 	}
-
+	// Ignorar imports tipo URL
+	if strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://") {
+		return ""
+	}
 	// Handle imports with aliases (@organization/package)
 	parts := strings.Split(importPath, "/")
-
-	// If it starts with @ it's an import with a scoped package (@org/package)
 	if strings.HasPrefix(parts[0], "@") && len(parts) > 1 {
 		return parts[0] + "/" + parts[1]
 	}
-
-	// If it's a subpath of a package (package/subpath)
 	return parts[0]
 }
 

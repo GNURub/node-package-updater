@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -313,37 +312,48 @@ func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache
 		bar, _ = ui.ShowProgressBar(totalDeps)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(totalDeps)
-
+	// Lanzar la actualización en un goroutine
 	go func() {
 		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, cache)
 	}()
 
+	currentProcessed := 0
+	progressDone := make(chan struct{})
+	// Progreso y sincronización solo por canales
 	go func() {
-		currentProcessed := 0
-		for {
+		for currentProcessed < totalDeps {
 			select {
-			case packageName := <-currentPackageName:
+			case packageName, ok := <-currentPackageName:
+				if !ok {
+					currentPackageName = nil
+					continue
+				}
 				if bar != nil {
 					bar.Send(ui.PackageName(packageName))
 				}
-			case <-dependencyProcessed:
-				wg.Done()
+			case _, ok := <-dependencyProcessed:
+				if !ok {
+					dependencyProcessed = nil
+					continue
+				}
 				currentProcessed++
 				if bar != nil {
 					percentage := float64(currentProcessed) / float64(totalDeps)
 					bar.Send(ui.ProgressMsg{Percentage: percentage, CurrentPackageIndex: currentProcessed})
 				}
 			}
+			if currentPackageName == nil && dependencyProcessed == nil {
+				break
+			}
 		}
+		close(progressDone)
 	}()
 
 	if bar != nil {
 		bar.Run()
 	}
 
-	wg.Wait()
+	<-progressDone
 
 	if bar != nil {
 		bar.ReleaseTerminal()
