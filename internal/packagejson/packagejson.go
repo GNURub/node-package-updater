@@ -408,8 +408,9 @@ func (p *PackageJSON) UpdatePackageJSON(flags *cli.Flags, updatedDeps dependency
 			if dep.PackageNamePrefix != "" {
 				prefix = dep.PackageNamePrefix
 			}
-			// Formateamos el packageManager con el formato correcto: name@version con el prefijo preservado
-			packageManagerValue := fmt.Sprintf("%s%s@%s", prefix, dep.PackageName, dep.NextVersion.String())
+
+			// Formateamos correctamente el valor del packageManager
+			packageManagerValue := fmt.Sprintf("%s%s@%s", prefix, dep.PackageName, strings.TrimPrefix(dep.NextVersion.String(), dep.NextVersion.Prefix()))
 			orderedJSON.Set(constants.PackageManager.String(), packageManagerValue)
 			continue
 		}
