@@ -325,7 +325,7 @@ func TestCheckUnusedDependencies_DryRun(t *testing.T) {
 	}
 
 	// Call CheckUnusedDependencies with dry run
-	err = CheckUnusedDependencies(flags)
+	_, err = CheckUnusedDependencies(flags)
 	if err != nil {
 		t.Fatalf("CheckUnusedDependencies returned an error: %v", err)
 	}
