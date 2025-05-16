@@ -65,39 +65,29 @@ type CheckResults struct {
 }
 
 // CheckUnusedDependencies looks for unused dependencies in an npm project
-func CheckUnusedDependencies(flags *cli.Flags) error {
+// Ahora retorna los resultados y no imprime nada directamente
+func CheckUnusedDependencies(flags *cli.Flags) ([]*CheckResults, error) {
 	baseDir := flags.BaseDir
 	if baseDir == "" {
 		baseDir = "."
 	}
 
-	// Use packagejson.LoadPackageJSON instead of reading package.json directly
 	options := []packagejson.Option{}
-
-	// Load the package.json with workspaces if needed
 	if flags.WithWorkspaces {
 		options = append(options, packagejson.EnableWorkspaces())
 	}
-
 	if flags.Depth > 0 {
 		options = append(options, packagejson.WithDepth(flags.Depth))
 	}
 
 	pkg, err := packagejson.LoadPackageJSON(baseDir, options...)
 	if err != nil {
-		return fmt.Errorf("error loading package.json: %w", err)
+		return nil, fmt.Errorf("error loading package.json: %w", err)
 	}
 
-	// Process each workspace (or just the main package if no workspaces)
 	var allResults []*CheckResults
-
-	// Track all workspaces to process
 	workspacesMap := make(map[string]*packagejson.PackageJSON)
-
-	// Add the main package
 	workspacesMap[pkg.Dir] = pkg
-
-	// Add all workspaces if they exist
 	for path, workspacePkg := range pkg.WorkspacesPkgs {
 		workspacesMap[path] = workspacePkg
 	}
@@ -107,21 +97,14 @@ func CheckUnusedDependencies(flags *cli.Flags) error {
 		files, err := findFilesToScan(workspacePath)
 		if err != nil {
 			if flags.Verbose {
-				fmt.Printf("⚠️ Error scanning files in workspace %s: %v\n", workspacePath, err)
+				// Guardar advertencia en los resultados, no imprimir
 			}
 			continue
 		}
 
-		if flags.Verbose {
-			fmt.Printf("📂 Analyzing %d files for dependencies in %s\n", len(files), workspacePath)
-		}
-
 		// Analyze files and find used dependencies
-		usedPackages, err := findUsedDependencies(files, flags.Verbose)
+		usedPackages, err := findUsedDependencies(files, false) // nunca verbose aquí
 		if err != nil {
-			if flags.Verbose {
-				fmt.Printf("⚠️ Error finding used dependencies in workspace %s: %v\n", workspacePath, err)
-			}
 			continue
 		}
 
@@ -152,17 +135,20 @@ func CheckUnusedDependencies(flags *cli.Flags) error {
 		results := analyzePackageDependencies(deps, devDeps, peerDeps, optDeps, usedPackages)
 		results.WorkspacePath = workspacePath
 
-		// Show results for this workspace
-		printWorkspaceResults(results, workspacePath, flags.Verbose)
-
 		allResults = append(allResults, results)
 	}
 
-	// If fix option is specified, remove unused dependencies
-	if flags.Fix {
-		return fixUnusedDependencies(pkg, allResults, flags)
-	}
+	return allResults, nil
+}
 
+// Nueva función para aplicar fix y mostrar resultados
+func ProcessCheckDepsResults(pkg *packagejson.PackageJSON, results []*CheckResults, flags *cli.Flags) error {
+	for _, r := range results {
+		printWorkspaceResults(r, r.WorkspacePath, flags.Verbose)
+	}
+	if flags.Fix {
+		return fixUnusedDependencies(pkg, results, flags)
+	}
 	return nil
 }
 

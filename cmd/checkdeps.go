@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/GNURub/node-package-updater/internal/packagejson"
+	"github.com/GNURub/node-package-updater/internal/ui"
 	"github.com/GNURub/node-package-updater/pkg/checkdeps"
 	"github.com/spf13/cobra"
 )
@@ -18,9 +20,37 @@ var checkdepsCmd = &cobra.Command{
 			flags.BaseDir = args[0]
 		}
 
-		if err := checkdeps.CheckUnusedDependencies(flags); err != nil {
+		done := make(chan struct{})
+		errChan := make(chan error, 1)
+		var results []*checkdeps.CheckResults
+		go func() {
+			var err error
+			results, err = checkdeps.CheckUnusedDependencies(flags)
+			errChan <- err
+			close(done)
+		}()
+
+		ui.RunSpinner("Analizando dependencias...", done)
+
+		err := <-errChan
+		if err != nil {
 			fmt.Printf("❌ Error checking dependencies: %v\n", err)
 			os.Exit(1)
+		}
+
+		// Mostrar resultados después del spinner
+		if results != nil {
+			// Cargar el package.json principal para el fix
+			baseDir := flags.BaseDir
+			if baseDir == "" {
+				baseDir = "."
+			}
+			pkg, err := packagejson.LoadPackageJSON(baseDir)
+			if err != nil {
+				fmt.Printf("❌ Error loading package.json: %v\n", err)
+				os.Exit(1)
+			}
+			checkdeps.ProcessCheckDepsResults(pkg, results, flags)
 		}
 	},
 }
