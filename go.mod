@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.5
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/evanw/esbuild v0.25.4
+	github.com/evanw/esbuild v0.25.5
 	github.com/iancoleman/orderedmap v0.3.0
 	github.com/spf13/cobra v1.9.1
 	github.com/valyala/fasthttp v1.62.0
