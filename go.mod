@@ -11,6 +11,7 @@ require (
 	github.com/iancoleman/orderedmap v0.3.0
 	github.com/spf13/cobra v1.9.1
 	github.com/valyala/fasthttp v1.62.0
+	github.com/valyala/fastjson v1.6.4
 	gopkg.in/yaml.v3 v3.0.1
 )
 

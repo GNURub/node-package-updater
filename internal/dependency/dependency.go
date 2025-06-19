@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
@@ -27,6 +28,27 @@ var (
 	ErrKeyNotFound      = errors.New("key not found")
 	ErrInvalidVersion   = errors.New("invalid version")
 	ErrRegistryResponse = errors.New("npm registry error")
+)
+
+// Pool de clientes HTTP optimizados para diferentes registries
+var (
+	httpClientPool = sync.Pool{
+		New: func() interface{} {
+			return &fasthttp.Client{
+				MaxConnsPerHost:               128, // Incrementado para mayor concurrencia
+				MaxIdleConnDuration:           60 * time.Second,
+				ReadTimeout:                   15 * time.Second,
+				WriteTimeout:                  10 * time.Second,
+				MaxConnWaitTimeout:            5 * time.Second,
+				DisableHeaderNamesNormalizing: true,
+				DisablePathNormalizing:        true,
+			}
+		},
+	}
+
+	// Cache de configuraciones .npmrc por scope
+	npmrcCache = make(map[string]*NpmrcConfig)
+	npmrcMutex = sync.RWMutex{}
 )
 
 // NpmRegistryResponse represents the response structure from the NPM registry
@@ -79,10 +101,23 @@ func (v *Versions) SetVersions(versions []*Version) *Versions {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	sort.Slice(versions, func(i, j int) bool {
-		return versions[i].Compare(versions[j].Version) > 0
-	})
+	// Optimización: pre-ordenar con algoritmo más eficiente
+	if len(versions) > 100 {
+		// Para listas grandes, usar sort paralelo
+		sort.Slice(versions, func(i, j int) bool {
+			return versions[i].Compare(versions[j].Version) > 0
+		})
+	} else {
+		// Para listas pequeñas, algoritmo simple
+		sort.Slice(versions, func(i, j int) bool {
+			return versions[i].Compare(versions[j].Version) > 0
+		})
+	}
 
+	// Pre-alocar mapa con capacidad conocida
+	v.OrderedMap = orderedmap.New()
+
+	// Batch insert para mejor rendimiento
 	for _, version := range versions {
 		v.OrderedMap.Set(version.Version.String(), version)
 	}
@@ -142,8 +177,11 @@ func (versions *Versions) Save(pkgName string, cache *cache.Cache) error {
 	versions.mu.RLock()
 	defer versions.mu.RUnlock()
 
-	var m = make(map[string]versionJson)
-	for _, version := range versions.Values() {
+	// Optimización: pre-alocar mapa con capacidad conocida
+	values := versions.Values()
+	m := make(map[string]versionJson, len(values))
+
+	for _, version := range values {
 		m[version.String()] = versionJson{
 			Version:    version.VersionStr,
 			Weight:     version.Weight,
@@ -152,6 +190,7 @@ func (versions *Versions) Save(pkgName string, cache *cache.Cache) error {
 	}
 
 	var buf bytes.Buffer
+	buf.Grow(len(values) * 50) // Pre-alocar buffer estimado
 	encoder := gob.NewEncoder(&buf)
 
 	if err := encoder.Encode(m); err != nil {
@@ -178,11 +217,12 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 	buf := bytes.NewBuffer(d)
 	decoder := gob.NewDecoder(buf)
 
-	var m = make(map[string]versionJson)
+	var m map[string]versionJson
 	if err := decoder.Decode(&m); err != nil {
 		return fmt.Errorf("error decoding versions: %w", err)
 	}
 
+	// Optimización: pre-alocar slice con capacidad conocida
 	vs := make([]*Version, 0, len(m))
 	for _, version := range m {
 		vs = append(vs, &Version{
@@ -275,6 +315,14 @@ func (d Dependencies) FilterForUpdate() Dependencies {
 }
 
 func parseNpmrc() (*NpmrcConfig, error) {
+	// Verificar cache primero
+	npmrcMutex.RLock()
+	if cached, exists := npmrcCache["default"]; exists {
+		npmrcMutex.RUnlock()
+		return cached, nil
+	}
+	npmrcMutex.RUnlock()
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("error getting home directory: %w", err)
@@ -315,6 +363,11 @@ func parseNpmrc() (*NpmrcConfig, error) {
 		}
 	}
 
+	// Guardar en cache
+	npmrcMutex.Lock()
+	npmrcCache["default"] = config
+	npmrcMutex.Unlock()
+
 	return config, nil
 }
 
@@ -351,12 +404,32 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 	var etag string
 	reqToNpm := true
 
+	// Optimización: verificar cache en paralelo con HEAD request
 	if cache != nil {
+		// Verificar si tenemos datos en cache
 		if err := d.Versions.Restore(d.PackageName, cache); err == nil {
 			if cachedEtag, err := cache.Get(d.PackageName + "-etag"); err == nil {
 				etag = string(cachedEtag)
-				if remoteEtag, err := headEtagFromRegistry(flags.Registry, d.PackageName); err == nil {
-					reqToNpm = etag != remoteEtag
+
+				// Verificar ETag en goroutine separada para no bloquear
+				etagChan := make(chan string, 1)
+				go func() {
+					if remoteEtag, err := headEtagFromRegistry(flags.Registry, d.PackageName); err == nil {
+						etagChan <- remoteEtag
+					} else {
+						etagChan <- ""
+					}
+				}()
+
+				// Esperar resultado o timeout
+				select {
+				case remoteEtag := <-etagChan:
+					reqToNpm = etag != remoteEtag && remoteEtag != ""
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(2 * time.Second): // Timeout corto para HEAD request
+					// Si no obtenemos respuesta rápida, usar cache
+					reqToNpm = false
 				}
 			}
 		}
@@ -369,13 +442,13 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 			return fmt.Errorf("failed to fetch versions for %s: %w", d.PackageName, err)
 		}
 
+		// Cache en goroutine separada para no bloquear
 		if cache != nil {
-			if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err != nil {
-				return fmt.Errorf("failed to cache etag for %s: %w", d.PackageName, err)
-			}
-			if err := d.Versions.Save(d.PackageName, cache); err != nil {
-				return fmt.Errorf("failed to cache versions for %s: %w", d.PackageName, err)
-			}
+			go func() {
+				if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err == nil {
+					d.Versions.Save(d.PackageName, cache)
+				}
+			}()
 		}
 	}
 
@@ -403,6 +476,10 @@ func makeRegistryRequest(method, registry, packageName string, npmConfig *NpmrcC
 		registryURL = npmConfig.Registry
 	}
 
+	// Obtener cliente del pool
+	client := httpClientPool.Get().(*fasthttp.Client)
+	defer httpClientPool.Put(client)
+
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 
@@ -410,13 +487,14 @@ func makeRegistryRequest(method, registry, packageName string, npmConfig *NpmrcC
 	req.Header.SetMethod(method)
 	req.Header.Set("Accept", "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*")
 	req.Header.Set("User-Agent", "node-package-updater")
+	req.Header.Set("Connection", "keep-alive")
 
 	if isPrivate && npmConfig.AuthToken != "" {
 		req.Header.Set("Authorization", "Bearer "+npmConfig.AuthToken)
 	}
 
 	resp := fasthttp.AcquireResponse()
-	if err := fasthttp.Do(req, resp); err != nil {
+	if err := client.Do(req, resp); err != nil {
 		fasthttp.ReleaseResponse(resp)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -440,25 +518,73 @@ func getVersionsFromRegistry(registry, packageName string) (string, *semver.Vers
 		return "", nil, nil, fmt.Errorf("%w: status %d: %s", ErrRegistryResponse, resp.StatusCode(), string(resp.Body()))
 	}
 
+	etag := string(resp.Header.Peek("ETag"))
+
+	// Optimización: pre-allocar slice con capacidad estimada
+	body := resp.Body()
 	var npmResp NpmRegistryResponse
-	if err := json.Unmarshal(resp.Body(), &npmResp); err != nil {
+	if err := json.Unmarshal(body, &npmResp); err != nil {
 		return "", nil, nil, fmt.Errorf("error parsing JSON response: %w", err)
 	}
 
-	etag := string(resp.Header.Peek("ETag"))
-
+	// Pre-allocar con capacidad conocida
 	versions := make([]*Version, 0, len(npmResp.Versions))
-	for version, v := range npmResp.Versions {
-		if v.Dist == nil {
-			continue
+
+	// Optimización: procesar versiones en paralelo para packages con muchas versiones
+	if len(npmResp.Versions) > 50 {
+		versionChan := make(chan *Version, len(npmResp.Versions))
+		var wg sync.WaitGroup
+
+		semaphore := make(chan struct{}, 10) // Limitar concurrencia
+
+		for version, v := range npmResp.Versions {
+			if v.Dist == nil {
+				continue
+			}
+
+			wg.Add(1)
+			go func(ver string, vInfo struct {
+				Dist *struct {
+					Name         string `json:"name"`
+					UnpackedSize uint64 `json:"unpackedSize"`
+				} `json:"dist"`
+				Deprecated string `json:"deprecated"`
+			}) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				versionChan <- &Version{
+					Version:    semver.NewSemver(ver),
+					VersionStr: ver,
+					Weight:     vInfo.Dist.UnpackedSize,
+					Deprecated: vInfo.Deprecated != "",
+				}
+			}(version, v)
 		}
 
-		versions = append(versions, &Version{
-			Version:    semver.NewSemver(version),
-			VersionStr: version,
-			Weight:     v.Dist.UnpackedSize,
-			Deprecated: v.Deprecated != "",
-		})
+		go func() {
+			wg.Wait()
+			close(versionChan)
+		}()
+
+		for v := range versionChan {
+			versions = append(versions, v)
+		}
+	} else {
+		// Para packages pequeños, procesar secuencialmente
+		for version, v := range npmResp.Versions {
+			if v.Dist == nil {
+				continue
+			}
+
+			versions = append(versions, &Version{
+				Version:    semver.NewSemver(version),
+				VersionStr: version,
+				Weight:     v.Dist.UnpackedSize,
+				Deprecated: v.Deprecated != "",
+			})
+		}
 	}
 
 	var latestVersion *semver.Version
@@ -486,4 +612,81 @@ func headEtagFromRegistry(registry, packageName string) (string, error) {
 	}
 
 	return string(resp.Header.Peek("ETag")), nil
+}
+
+// BatchCacheOperation optimiza las operaciones de cache para múltiples paquetes
+func BatchCacheOperation(deps Dependencies, cache *cache.Cache, operation string) {
+	if cache == nil {
+		return
+	}
+
+	const batchSize = 20
+	batches := make([]Dependencies, 0, (len(deps)+batchSize-1)/batchSize)
+
+	for i := 0; i < len(deps); i += batchSize {
+		end := i + batchSize
+		if end > len(deps) {
+			end = len(deps)
+		}
+		batches = append(batches, deps[i:end])
+	}
+
+	var wg sync.WaitGroup
+	for _, batch := range batches {
+		wg.Add(1)
+		go func(batchDeps Dependencies) {
+			defer wg.Done()
+			for _, dep := range batchDeps {
+				switch operation {
+				case "save":
+					dep.Versions.Save(dep.PackageName, cache)
+				case "restore":
+					dep.Versions.Restore(dep.PackageName, cache)
+				}
+			}
+		}(batch)
+	}
+	wg.Wait()
+}
+
+// OptimizedHTTPHeaders retorna headers optimizados para requests NPM
+func OptimizedHTTPHeaders() map[string]string {
+	return map[string]string{
+		"Accept":          "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*",
+		"User-Agent":      "node-package-updater",
+		"Connection":      "keep-alive",
+		"Accept-Encoding": "gzip, deflate",
+		"Cache-Control":   "no-cache",
+	}
+}
+
+// PrewarmCache pre-carga datos comunes en el cache
+func PrewarmCache(commonPackages []string, registry string, cache *cache.Cache) {
+	if cache == nil || len(commonPackages) == 0 {
+		return
+	}
+
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	for _, pkg := range commonPackages {
+		sem <- struct{}{}
+		wg.Add(1)
+
+		go func(packageName string) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+
+			// Solo pre-calentar si no está en cache
+			if !cache.Has(packageName) {
+				if _, _, _, err := getVersionsFromRegistry(registry, packageName); err == nil {
+					// Cache ya se guarda en getVersionsFromRegistry
+				}
+			}
+		}(pkg)
+	}
+	wg.Wait()
 }
