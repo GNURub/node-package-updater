@@ -10,7 +10,6 @@ import (
 	"github.com/GNURub/node-package-updater/internal/cli"
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/performance"
-	"github.com/GNURub/node-package-updater/internal/pipeline"
 	"github.com/valyala/fasthttp"
 )
 
@@ -41,14 +40,8 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		numWorkers = len(deps)
 	}
 
-	// Pre-agrupar dependencias por registry para optimizar conexiones
-	depsByRegistry := groupDependenciesByRegistry(deps, flags)
-
-	// Usar worker pool optimizado para mejor gestión de recursos
-	pool := performance.NewWorkerPool(numWorkers)
-	pool.Start()
-	defer pool.Stop()
-
+	// Usar semáforo simple para evitar problemas con worker pool
+	sem := make(chan struct{}, numWorkers)
 	var wg sync.WaitGroup
 
 	// Goroutine separada para cerrar canales
@@ -58,47 +51,44 @@ func FetchNewVersions(deps dependency.Dependencies, flags *cli.Flags, processed 
 		close(currentPackage)
 	}()
 
-	// Procesar dependencias agrupadas por registry con worker pool
-	for _, registryDeps := range depsByRegistry {
-		for _, dep := range registryDeps {
-			wg.Add(1)
+	// Procesar dependencias con control de concurrencia simple
+	for _, dep := range deps {
+		sem <- struct{}{}
+		wg.Add(1)
 
-			// Capturar variables para el closure
-			currentDep := dep
+		go func(currentDep *dependency.Dependency) {
+			defer func() {
+				<-sem
+				wg.Done()
+				memOptimizer.ProcessedPackage()
+			}()
 
-			pool.Submit(func() {
-				defer func() {
-					wg.Done()
-					memOptimizer.ProcessedPackage()
-				}()
+			// Timeout más corto para operaciones individuales
+			timeoutDuration := time.Duration(flags.Timeout) * time.Second
+			if timeoutDuration > 30*time.Second {
+				timeoutDuration = 30 * time.Second
+			}
 
-				// Timeout más corto para operaciones individuales
-				timeoutDuration := time.Duration(flags.Timeout) * time.Second
-				if timeoutDuration > 30*time.Second {
-					timeoutDuration = 30 * time.Second
-				}
+			ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
+			defer cancel()
 
-				ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
-				defer cancel()
+			// Non-blocking send para evitar deadlocks
+			select {
+			case currentPackage <- currentDep.PackageName:
+			case <-ctx.Done():
+				return
+			default:
+			}
 
-				// Non-blocking send para evitar deadlocks
-				select {
-				case currentPackage <- currentDep.PackageName:
-				case <-ctx.Done():
-					return
-				default:
-				}
+			currentDep.FetchNewVersion(ctx, flags, cache)
 
-				currentDep.FetchNewVersion(ctx, flags, cache)
-
-				select {
-				case processed <- true:
-				case <-ctx.Done():
-					return
-				default:
-				}
-			})
-		}
+			select {
+			case processed <- true:
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}(dep)
 	}
 	wg.Wait()
 }
@@ -162,39 +152,8 @@ func groupDependenciesByRegistry(deps dependency.Dependencies, flags *cli.Flags)
 }
 
 // FetchNewVersionsOptimized usa el pipeline optimizado para mejor rendimiento
+// TEMPORALMENTE DESHABILITADA - usar FetchNewVersions normal
 func FetchNewVersionsOptimized(deps dependency.Dependencies, flags *cli.Flags, processed chan bool, currentPackage chan string, cache *cache.Cache) {
-	// Usar el procesador paralelo optimizado
-	processor := pipeline.NewParallelDependencyProcessor(cache, flags)
-	defer processor.Cleanup()
-
-	// Agrupar dependencias por registry
-	depsByRegistry := groupDependenciesByRegistry(deps, flags)
-
-	// Procesar usando el pipeline optimizado
-	results, errors := processor.ProcessByRegistry(depsByRegistry)
-
-	// Enviar notificaciones de progreso
-	go func() {
-		defer func() {
-			close(processed)
-			close(currentPackage)
-		}()
-
-		for _, dep := range results {
-			select {
-			case currentPackage <- dep.PackageName:
-			default:
-			}
-
-			select {
-			case processed <- true:
-			default:
-			}
-		}
-
-		// Reportar errores si los hay
-		for _, err := range errors {
-			_ = err // TODO: manejar errores apropiadamente
-		}
-	}()
+	// Por ahora, usar la implementación estándar para evitar problemas
+	FetchNewVersions(deps, flags, processed, currentPackage, cache)
 }

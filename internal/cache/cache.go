@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -45,18 +44,10 @@ var (
 		},
 	}
 
-	// Pool de compresores gzip
+	// Pool de compresores gzip (mantener solo el que funciona bien)
 	gzipWriterPool = sync.Pool{
 		New: func() interface{} {
 			return gzip.NewWriter(io.Discard)
-		},
-	}
-
-	// Pool de descompresores gzip
-	gzipReaderPool = sync.Pool{
-		New: func() interface{} {
-			reader, _ := gzip.NewReader(bytes.NewReader(nil))
-			return reader
 		},
 	}
 )
@@ -123,9 +114,6 @@ func (cache *Cache) Has(key string) bool {
 }
 
 func (cache *Cache) Get(key string) ([]byte, error) {
-	// Cleanup automático periódico
-	cache.AutoCleanup()
-
 	if value, found := cache.memCache.Load(key); found {
 		return value.([]byte), nil
 	}
@@ -139,10 +127,11 @@ func (cache *Cache) Get(key string) ([]byte, error) {
 		return nil, err
 	}
 
-	// Verificar si los datos están comprimidos
-	decompressedData, err := cache.tryDecompress(data)
-	if err == nil {
-		data = decompressedData
+	// Verificar si los datos están comprimidos de forma simple
+	if len(data) > 0 && data[0] == 1 {
+		if decompressedData, err := cache.tryDecompress(data); err == nil {
+			data = decompressedData
+		}
 	}
 
 	cache.memCache.Store(key, data)
@@ -150,10 +139,12 @@ func (cache *Cache) Get(key string) ([]byte, error) {
 }
 
 func (cache *Cache) Set(key string, data []byte) error {
-	// Comprimir datos grandes para ahorrar espacio
-	compressedData, err := cache.compressIfBeneficial(data)
-	if err != nil {
-		return fmt.Errorf("compression failed: %w", err)
+	// Comprimir datos grandes para ahorrar espacio (simplificado)
+	compressedData := data
+	if len(data) > 1024 { // Solo comprimir datos grandes
+		if compressed, err := cache.compressIfBeneficial(data); err == nil {
+			compressedData = compressed
+		}
 	}
 
 	cache.memCache.Store(key, data) // Almacenar descomprimido en memoria
@@ -245,10 +236,10 @@ func (cache *Cache) tryDecompress(data []byte) ([]byte, error) {
 
 	compressedData := data[1:] // Remover marcador
 
-	gzReader := gzipReaderPool.Get().(*gzip.Reader)
-	defer gzipReaderPool.Put(gzReader)
-
-	if err := gzReader.Reset(bytes.NewReader(compressedData)); err != nil {
+	// Crear un nuevo reader en lugar de usar el pool para evitar problemas de concurrencia
+	reader := bytes.NewReader(compressedData)
+	gzReader, err := gzip.NewReader(reader)
+	if err != nil {
 		return nil, err
 	}
 	defer gzReader.Close()
@@ -263,7 +254,11 @@ func (cache *Cache) tryDecompress(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	return buf.Bytes(), nil
+	// Hacer una copia de los datos para evitar problemas con el buffer pool
+	result := make([]byte, buf.Len())
+	copy(result, buf.Bytes())
+
+	return result, nil
 }
 
 func ensureDir(dirName string) error {

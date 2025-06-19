@@ -404,32 +404,16 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 	var etag string
 	reqToNpm := true
 
-	// Optimización: verificar cache en paralelo con HEAD request
+	// Verificar cache de manera simple
 	if cache != nil {
 		// Verificar si tenemos datos en cache
 		if err := d.Versions.Restore(d.PackageName, cache); err == nil {
 			if cachedEtag, err := cache.Get(d.PackageName + "-etag"); err == nil {
 				etag = string(cachedEtag)
 
-				// Verificar ETag en goroutine separada para no bloquear
-				etagChan := make(chan string, 1)
-				go func() {
-					if remoteEtag, err := headEtagFromRegistry(flags.Registry, d.PackageName); err == nil {
-						etagChan <- remoteEtag
-					} else {
-						etagChan <- ""
-					}
-				}()
-
-				// Esperar resultado o timeout
-				select {
-				case remoteEtag := <-etagChan:
-					reqToNpm = etag != remoteEtag && remoteEtag != ""
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(2 * time.Second): // Timeout corto para HEAD request
-					// Si no obtenemos respuesta rápida, usar cache
-					reqToNpm = false
+				// Verificar ETag de forma síncrona para evitar problemas
+				if remoteEtag, err := headEtagFromRegistry(flags.Registry, d.PackageName); err == nil {
+					reqToNpm = etag != remoteEtag
 				}
 			}
 		}
@@ -442,13 +426,11 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 			return fmt.Errorf("failed to fetch versions for %s: %w", d.PackageName, err)
 		}
 
-		// Cache en goroutine separada para no bloquear
+		// Cache de forma síncrona para evitar problemas
 		if cache != nil {
-			go func() {
-				if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err == nil {
-					d.Versions.Save(d.PackageName, cache)
-				}
-			}()
+			if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err == nil {
+				d.Versions.Save(d.PackageName, cache)
+			}
 		}
 	}
 

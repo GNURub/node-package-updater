@@ -312,14 +312,9 @@ func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache
 		bar, _ = ui.ShowProgressBar(totalDeps)
 	}
 
-	// Lanzar la actualización usando el método optimizado
+	// Lanzar la actualización usando el método estándar optimizado
 	go func() {
-		// Usar la función optimizada para mejor rendimiento
-		if flags.CPUs > 8 || len(allDeps) > 100 {
-			updater.FetchNewVersionsOptimized(allDeps, flags, dependencyProcessed, currentPackageName, cache)
-		} else {
-			updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, cache)
-		}
+		updater.FetchNewVersions(allDeps, flags, dependencyProcessed, currentPackageName, cache)
 	}()
 
 	currentProcessed := 0
