@@ -66,12 +66,11 @@ Flags:
 
 ## Benchmarks
 
-| Command     |      Mean [ms] | Min [ms] | Max [ms] |     Relative |
-| :---------- | -------------: | -------: | -------: | -----------: |
-| `npu -x -n` |    168.7 ± 5.3 |    161.6 |    178.2 |         1.00 |
-| `ncu -u`    | 3058.2 ± 222.5 |   2836.7 |   3492.8 | 18.13 ± 1.44 |
+| Command     |      Mean [s] | Min [s] | Max [s] |    Relative |
+| :---------- | ------------: | ------: | ------: | ----------: |
+| `npu -x -n` | 1.258 ± 0.215 |   1.138 |   1.680 |        1.00 |
+| `ncu -u`    | 3.923 ± 1.848 |   2.768 |   8.454 | 3.12 ± 1.56 |
 
 ### Summary
 
-npu -x -n ran
-18.13 ± 1.44 times faster than ncu -u
+`npu -x -n` is approximately 3.12 times faster than `ncu -u` on average, with a mean execution time of 1.258 seconds compared to 3.923 seconds for `ncu -u`. The minimum execution time for `npu -x -n` is 1.138 seconds, while the maximum is 1.680 seconds, indicating consistent performance across runs.
