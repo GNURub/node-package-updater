@@ -245,6 +245,10 @@ func (pm *PackageManager) installCommand(args ...string) []string {
 }
 
 func (pm *PackageManager) Install(args ...string) error {
+	return pm.InstallInDir("", args...)
+}
+
+func (pm *PackageManager) InstallInDir(dir string, args ...string) error {
 	command := pm.installCommand(args...)
 	var cmd *exec.Cmd
 
@@ -255,9 +259,25 @@ func (pm *PackageManager) Install(args ...string) error {
 		cmd = exec.Command("sh", "-c", strings.Join(command, " "))
 	}
 
+	if dir != "" {
+		cmd.Dir = dir
+	}
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func (pm *PackageManager) FindLockfiles(dir string) []string {
+	lockfiles := make([]string, 0, len(pm.LockFiles))
+	for _, lockFile := range pm.LockFiles {
+		lockfilePath := filepath.Join(dir, lockFile)
+		if fileInfo, err := os.Stat(lockfilePath); err == nil && !fileInfo.IsDir() {
+			lockfiles = append(lockfiles, lockfilePath)
+		}
+	}
+
+	return lockfiles
 }
 
 func getWorkspacesFromPnpm(dir string) ([]string, error) {

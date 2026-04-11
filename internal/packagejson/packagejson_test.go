@@ -103,6 +103,75 @@ func TestGroupDependenciesByWorkspaceDoesNotDuplicateFirstDependency(t *testing.
 	}
 }
 
+func TestResolveProjectRoot(t *testing.T) {
+	t.Run("returns monorepo root for workspace path", func(t *testing.T) {
+		root := t.TempDir()
+		workspaceDir := filepath.Join(root, "packages", "app")
+
+		if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+			t.Fatalf("mkdir workspace: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{
+  "name": "root",
+  "workspaces": ["packages/*"]
+}`), 0o644); err != nil {
+			t.Fatalf("write root package.json: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(root, "package-lock.json"), []byte("{}"), 0o644); err != nil {
+			t.Fatalf("write package-lock: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(workspaceDir, "package.json"), []byte(`{"name":"app"}`), 0o644); err != nil {
+			t.Fatalf("write workspace package.json: %v", err)
+		}
+
+		resolvedRoot, pm, err := ResolveProjectRoot(workspaceDir, "")
+		if err != nil {
+			t.Fatalf("resolve project root: %v", err)
+		}
+
+		if resolvedRoot != root {
+			t.Fatalf("expected root %q, got %q", root, resolvedRoot)
+		}
+
+		if pm != packagemanager.Npm {
+			t.Fatalf("expected npm package manager, got %v", pm)
+		}
+	})
+
+	t.Run("returns nearest package root for standalone project", func(t *testing.T) {
+		root := t.TempDir()
+		subDir := filepath.Join(root, "src")
+
+		if err := os.MkdirAll(subDir, 0o755); err != nil {
+			t.Fatalf("mkdir subdir: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"standalone"}`), 0o644); err != nil {
+			t.Fatalf("write package.json: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(root, "pnpm-lock.yaml"), []byte("lockfileVersion: '9.0'"), 0o644); err != nil {
+			t.Fatalf("write pnpm lockfile: %v", err)
+		}
+
+		resolvedRoot, pm, err := ResolveProjectRoot(subDir, "")
+		if err != nil {
+			t.Fatalf("resolve project root: %v", err)
+		}
+
+		if resolvedRoot != root {
+			t.Fatalf("expected root %q, got %q", root, resolvedRoot)
+		}
+
+		if pm != packagemanager.Pnpm {
+			t.Fatalf("expected pnpm package manager, got %v", pm)
+		}
+	})
+}
+
 func keys(m map[string]*PackageJSON) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

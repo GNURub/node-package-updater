@@ -240,6 +240,89 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	return pkg, nil
 }
 
+func ResolveProjectRoot(startDir, packageManagerOverride string) (string, *packagemanager.PackageManager, error) {
+	if startDir == "" {
+		startDir = "."
+	}
+
+	absPath, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to resolve project path: %w", err)
+	}
+
+	info, err := os.Stat(absPath)
+	if err == nil && !info.IsDir() {
+		absPath = filepath.Dir(absPath)
+	}
+
+	var nearestPackageDir string
+	var workspaceRoot string
+
+	for current := absPath; ; current = filepath.Dir(current) {
+		manifestPath := filepath.Join(current, "package.json")
+		data, err := os.ReadFile(manifestPath)
+		if err == nil {
+			var manifest struct {
+				Manager    string     `json:"packageManager,omitempty"`
+				Workspaces Workspaces `json:"workspaces,omitempty"`
+			}
+
+			if err := json.Unmarshal(data, &manifest); err == nil {
+				if nearestPackageDir == "" {
+					nearestPackageDir = current
+				}
+
+				pm := packagemanager.Detect(current, firstNonEmpty(packageManagerOverride, manifest.Manager))
+				for _, workspacePath := range pm.GetWorkspacesPaths(current, manifest.Workspaces.Patterns()) {
+					if isPathWithin(absPath, workspacePath) {
+						workspaceRoot = current
+					}
+				}
+			}
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+
+	rootDir := workspaceRoot
+	if rootDir == "" {
+		rootDir = nearestPackageDir
+	}
+	if rootDir == "" {
+		return "", nil, errors.New("no package.json found in this project")
+	}
+
+	rootPkg, err := LoadPackageJSON(rootDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	rootPkg.PackageManager = packagemanager.Detect(rootDir, firstNonEmpty(packageManagerOverride, rootPkg.PackageJson.Manager))
+	return rootDir, rootPkg.PackageManager, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+
+	return ""
+}
+
+func isPathWithin(targetPath, basePath string) bool {
+	rel, err := filepath.Rel(basePath, targetPath)
+	if err != nil {
+		return false
+	}
+
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
 func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	var allDeps dependency.Dependencies
 
@@ -484,7 +567,7 @@ func (p *PackageJSON) UpdatePackageJSON(flags *cli.Flags, updatedDeps dependency
 	}
 
 	if !flags.NoInstall {
-		return p.PackageManager.Install()
+		return p.PackageManager.InstallInDir(p.Dir)
 	}
 
 	return nil

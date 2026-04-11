@@ -28,10 +28,12 @@ Usage:
   npu [command]
 
 Available Commands:
+  audit       Audit project dependencies for known vulnerabilities
   checkdeps   Check unused dependencies in the project
   completion  Generate the autocompletion script for the specified shell
   global      Global dependencies update
   help        Help about any command
+  install     Install dependencies with the correct package manager
   upgrade     Upgrade to the latest version of the CLI
   version     Print the version number of NPU
 
@@ -75,3 +77,37 @@ Flags:
 
 npu -x -n ran
 18.13 ± 1.44 times faster than ncu -u
+
+## Audit
+
+Audit the current project, including its workspaces:
+
+```bash
+npu audit
+```
+
+Write a JSON report:
+
+```bash
+npu audit --format json --output-file audit.json
+```
+
+Use the local OSV database:
+
+```bash
+npu audit --offline --download-db
+```
+
+## Install
+
+Install dependencies with the package manager detected for the target project:
+
+```bash
+npu install
+```
+
+Pass arguments through to the underlying package manager:
+
+```bash
+npu install -- --frozen-lockfile
+```
