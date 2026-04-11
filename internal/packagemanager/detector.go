@@ -71,7 +71,7 @@ func (p *PackageManager) GetWorkspacesPaths(dir string, pkgJsonWorkspaces []stri
 	if p == Pnpm {
 		ws, err := getWorkspacesFromPnpm(dir)
 
-		if err != nil {
+		if err == nil {
 			pkgJsonWorkspaces = append(pkgJsonWorkspaces, ws...)
 		}
 	}

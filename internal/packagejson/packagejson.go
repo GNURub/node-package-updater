@@ -30,6 +30,35 @@ var packageManagerRegex = regexp.MustCompile(`^([~^]?)([a-zA-Z0-9-]+)@(.+)$`)
 
 type Option func(*PackageJSON) error
 
+type Workspaces []string
+
+func (w *Workspaces) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(data, []byte("null")) {
+		*w = nil
+		return nil
+	}
+
+	var patterns []string
+	if err := json.Unmarshal(data, &patterns); err == nil {
+		*w = Workspaces(patterns)
+		return nil
+	}
+
+	var workspaceObject struct {
+		Packages []string `json:"packages"`
+	}
+	if err := json.Unmarshal(data, &workspaceObject); err != nil {
+		return err
+	}
+
+	*w = Workspaces(workspaceObject.Packages)
+	return nil
+}
+
+func (w Workspaces) Patterns() []string {
+	return []string(w)
+}
+
 type PackageJSON struct {
 	packageFilePath   string
 	Dir               string
@@ -44,7 +73,7 @@ type PackageJSON struct {
 		DevDependencies      map[string]string `json:"devDependencies,omitempty"`
 		PeerDependencies     map[string]string `json:"peerDependencies,omitempty"`
 		OptionalDependencies map[string]string `json:"optionalDependencies,omitempty"`
-		Workspaces           []string          `json:"workspaces,omitempty"`
+		Workspaces           Workspaces        `json:"workspaces,omitempty"`
 	}
 }
 
@@ -125,7 +154,7 @@ func LoadPackageJSON(dir string, opts ...Option) (*PackageJSON, error) {
 	}
 
 	if pkg.processWorkspaces {
-		workspacesPaths := pkg.PackageManager.GetWorkspacesPaths(pkg.Dir, pkg.PackageJson.Workspaces)
+		workspacesPaths := pkg.PackageManager.GetWorkspacesPaths(pkg.Dir, pkg.PackageJson.Workspaces.Patterns())
 		for _, workspacePath := range workspacesPaths {
 			if _, ok := pkg.WorkspacesPkgs[workspacePath]; ok {
 				continue
@@ -385,15 +414,16 @@ func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache
 		return nil, errors.New("no dependencies to update")
 	}
 
-	var depsByWorkspace = make(map[string]dependency.Dependencies)
-	for _, dep := range depsToUpdate {
-		if _, ok := depsByWorkspace[dep.Workspace]; !ok {
-			depsByWorkspace[dep.Workspace] = make(dependency.Dependencies, 0)
-			depsByWorkspace[dep.Workspace] = append(depsByWorkspace[dep.Workspace], dep)
-		}
+	return groupDependenciesByWorkspace(depsToUpdate), nil
+}
+
+func groupDependenciesByWorkspace(deps dependency.Dependencies) map[string]dependency.Dependencies {
+	depsByWorkspace := make(map[string]dependency.Dependencies)
+	for _, dep := range deps {
 		depsByWorkspace[dep.Workspace] = append(depsByWorkspace[dep.Workspace], dep)
 	}
-	return depsByWorkspace, nil
+
+	return depsByWorkspace
 }
 
 func (p *PackageJSON) UpdatePackageJSON(flags *cli.Flags, updatedDeps dependency.Dependencies) error {
