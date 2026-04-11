@@ -15,6 +15,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+replace github.com/diskfs/go-diskfs => github.com/diskfs/go-diskfs v1.7.0
+
+replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.1.0
+
 require (
 	bitbucket.org/creachadair/stringset v0.0.14 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
