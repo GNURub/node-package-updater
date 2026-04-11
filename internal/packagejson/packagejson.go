@@ -247,7 +247,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 		}
 
 		if !flags.Production {
-			for name, version := range p.PackageJson.DevDependencies {
+			for name, version := range pkg.PackageJson.DevDependencies {
 				d, err := dependency.NewDependency(name, version, constants.DevDependencies, workspace)
 				if err != nil {
 					continue
@@ -256,7 +256,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 			}
 
 			if flags.PeerDependencies {
-				for name, version := range p.PackageJson.PeerDependencies {
+				for name, version := range pkg.PackageJson.PeerDependencies {
 					d, err := dependency.NewDependency(name, version, constants.PeerDependencies, workspace)
 					if err != nil {
 						continue
@@ -277,6 +277,13 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	depsByWorkspace, err := UpdateDependencies(allDeps, flags, p.cache)
 	if err != nil {
 		return err
+	}
+
+	// Release the exclusive bitcask lock before running the package manager install.
+	// The install phase doesn't need the cache, and holding the lock prevents concurrent
+	// npu invocations in other terminals from even starting.
+	if p.cache != nil {
+		_ = p.cache.Close()
 	}
 
 	allError := true

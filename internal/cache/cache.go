@@ -42,7 +42,12 @@ func (cache *Cache) Clean() error {
 }
 
 func (cache *Cache) Close() error {
-	return cache.db.Close()
+	if cache.db == nil {
+		return nil
+	}
+	err := cache.db.Close()
+	cache.db = nil
+	return err
 }
 
 func (cache *Cache) Has(key string) bool {
@@ -50,12 +55,19 @@ func (cache *Cache) Has(key string) bool {
 	if found {
 		return true
 	}
+	if cache.db == nil {
+		return false
+	}
 	return cache.db.Has([]byte(key))
 }
 
 func (cache *Cache) Get(key string) ([]byte, error) {
 	if value, found := cache.memCache.Load(key); found {
 		return value.([]byte), nil
+	}
+
+	if cache.db == nil {
+		return nil, errors.New("cache closed")
 	}
 
 	if !cache.db.Has([]byte(key)) {
@@ -74,6 +86,10 @@ func (cache *Cache) Get(key string) ([]byte, error) {
 
 func (cache *Cache) Set(key string, data []byte) error {
 	cache.memCache.Store(key, data)
+
+	if cache.db == nil {
+		return nil
+	}
 
 	return cache.db.Put([]byte(key), data)
 }

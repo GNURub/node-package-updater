@@ -29,6 +29,35 @@ var (
 	ErrRegistryResponse = errors.New("npm registry error")
 )
 
+// npmrc config is parsed once per process — the file won't change mid-run.
+var (
+	npmrcOnce   sync.Once
+	cachedNpmrc *NpmrcConfig
+	cachedNpmrcErr error
+)
+
+func getOrParseNpmrc() (*NpmrcConfig, error) {
+	npmrcOnce.Do(func() {
+		cachedNpmrc, cachedNpmrcErr = parseNpmrc()
+	})
+	return cachedNpmrc, cachedNpmrcErr
+}
+
+// cacheKey returns a cache key that includes the effective registry URL so that
+// switching registries never serves stale data from a different source.
+func cacheKey(registry, packageName string) string {
+	npmCfg, _ := getOrParseNpmrc()
+	eff := effectiveRegistry(registry, packageName, npmCfg)
+	return eff + ":" + packageName
+}
+
+func effectiveRegistry(registry, packageName string, cfg *NpmrcConfig) string {
+	if cfg != nil && cfg.Scope != "" && strings.HasPrefix(packageName, cfg.Scope) && cfg.Registry != "" {
+		return cfg.Registry
+	}
+	return registry
+}
+
 // NpmRegistryResponse represents the response structure from the NPM registry
 type NpmRegistryResponse struct {
 	DistTags map[string]string `json:"dist-tags"`
@@ -142,12 +171,16 @@ func (versions *Versions) Save(pkgName string, cache *cache.Cache) error {
 	versions.mu.RLock()
 	defer versions.mu.RUnlock()
 
+	// Access the OrderedMap directly to avoid re-acquiring mu (RWMutex is not reentrant).
 	var m = make(map[string]versionJson)
-	for _, version := range versions.Values() {
-		m[version.String()] = versionJson{
-			Version:    version.VersionStr,
-			Weight:     version.Weight,
-			Deprecated: version.Deprecated,
+	for _, key := range versions.OrderedMap.Keys() {
+		if value, ok := versions.OrderedMap.Get(key); ok {
+			v := value.(*Version)
+			m[key] = versionJson{
+				Version:    v.VersionStr,
+				Weight:     v.Weight,
+				Deprecated: v.Deprecated,
+			}
 		}
 	}
 
@@ -203,7 +236,6 @@ type Dependency struct {
 	PackageName       string
 	PackageNamePrefix string
 	CurrentVersion    *semver.Version
-	LatestVersion     *semver.Version
 	NextVersion       *Version
 	HaveToUpdate      bool
 	Env               constants.DepEnv
@@ -344,37 +376,48 @@ func (d *Dependency) getScoreForSort() int {
 	}
 }
 
-func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cache *cache.Cache) error {
+func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, c *cache.Cache) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	var etag string
-	reqToNpm := true
+	key := cacheKey(flags.Registry, d.PackageName)
 
-	if cache != nil {
-		if err := d.Versions.Restore(d.PackageName, cache); err == nil {
-			if cachedEtag, err := cache.Get(d.PackageName + "-etag"); err == nil {
-				etag = string(cachedEtag)
-				if remoteEtag, err := headEtagFromRegistry(flags.Registry, d.PackageName); err == nil {
-					reqToNpm = etag != remoteEtag
-				}
-			}
+	// Read the cached ETag (if any) to send a conditional GET.
+	// A 304 response means the server confirmed our cache is still valid — no body to parse.
+	// A 200 response means the data changed — update the cache.
+	// This replaces the old HEAD+GET two-request pattern.
+	var cachedEtag string
+	if c != nil {
+		if raw, err := c.Get(key + "-etag"); err == nil {
+			cachedEtag = string(raw)
 		}
 	}
 
-	if reqToNpm {
-		var err error
-		etag, d.LatestVersion, d.Versions, err = getVersionsFromRegistry(flags.Registry, d.PackageName)
-		if err != nil {
-			return fmt.Errorf("failed to fetch versions for %s: %w", d.PackageName, err)
-		}
+	newEtag, freshVersions, err := getVersionsFromRegistry(flags.Registry, d.PackageName, cachedEtag)
+	if err != nil {
+		return fmt.Errorf("failed to fetch versions for %s: %w", d.PackageName, err)
+	}
 
-		if cache != nil {
-			if err := cache.Set(d.PackageName+"-etag", []byte(etag)); err != nil {
-				return fmt.Errorf("failed to cache etag for %s: %w", d.PackageName, err)
-			}
-			if err := d.Versions.Save(d.PackageName, cache); err != nil {
-				return fmt.Errorf("failed to cache versions for %s: %w", d.PackageName, err)
+	if freshVersions != nil {
+		// 200 — new data from registry; update versions and cache.
+		d.Versions = freshVersions
+		if c != nil {
+			_ = c.Set(key+"-etag", []byte(newEtag))
+			_ = d.Versions.Save(key, c)
+		}
+	} else {
+		// 304 — our cached ETag matched; restore versions from cache.
+		if c != nil {
+			if err := d.Versions.Restore(key, c); err != nil {
+				// Cache is in an inconsistent state (etag present but versions missing).
+				// Force a full refetch without the conditional header.
+				newEtag, freshVersions, err = getVersionsFromRegistry(flags.Registry, d.PackageName, "")
+				if err != nil {
+					return fmt.Errorf("failed to fetch versions for %s: %w", d.PackageName, err)
+				}
+				d.Versions = freshVersions
+				_ = c.Set(key+"-etag", []byte(newEtag))
+				_ = d.Versions.Save(key, c)
 			}
 		}
 	}
@@ -396,7 +439,7 @@ func (d *Dependency) FetchNewVersion(ctx context.Context, flags *cli.Flags, cach
 	}
 }
 
-func makeRegistryRequest(method, registry, packageName string, npmConfig *NpmrcConfig) (*fasthttp.Response, error) {
+func makeRegistryRequest(method, registry, packageName, ifNoneMatch string, npmConfig *NpmrcConfig) (*fasthttp.Response, error) {
 	isPrivate := strings.HasPrefix(packageName, npmConfig.Scope)
 	registryURL := registry
 	if isPrivate && npmConfig.Registry != "" {
@@ -411,6 +454,10 @@ func makeRegistryRequest(method, registry, packageName string, npmConfig *NpmrcC
 	req.Header.Set("Accept", "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*")
 	req.Header.Set("User-Agent", "node-package-updater")
 
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+
 	if isPrivate && npmConfig.AuthToken != "" {
 		req.Header.Set("Authorization", "Bearer "+npmConfig.AuthToken)
 	}
@@ -424,25 +471,33 @@ func makeRegistryRequest(method, registry, packageName string, npmConfig *NpmrcC
 	return resp, nil
 }
 
-func getVersionsFromRegistry(registry, packageName string) (string, *semver.Version, *Versions, error) {
-	npmConfig, err := parseNpmrc()
+// getVersionsFromRegistry fetches package versions from the npm registry.
+// Pass a non-empty ifNoneMatch to send a conditional GET (If-None-Match header).
+// Returns (etag, versions, nil) on 200, ("", nil, nil) on 304 (cache still valid),
+// or ("", nil, err) on failure.
+func getVersionsFromRegistry(registry, packageName, ifNoneMatch string) (string, *Versions, error) {
+	npmConfig, err := getOrParseNpmrc()
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("error parsing .npmrc: %w", err)
+		return "", nil, fmt.Errorf("error parsing .npmrc: %w", err)
 	}
 
-	resp, err := makeRegistryRequest("GET", registry, packageName, npmConfig)
+	resp, err := makeRegistryRequest("GET", registry, packageName, ifNoneMatch, npmConfig)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, err
 	}
 	defer fasthttp.ReleaseResponse(resp)
 
+	if resp.StatusCode() == fasthttp.StatusNotModified {
+		return "", nil, nil
+	}
+
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return "", nil, nil, fmt.Errorf("%w: status %d: %s", ErrRegistryResponse, resp.StatusCode(), string(resp.Body()))
+		return "", nil, fmt.Errorf("%w: status %d: %s", ErrRegistryResponse, resp.StatusCode(), string(resp.Body()))
 	}
 
 	var npmResp NpmRegistryResponse
 	if err := json.Unmarshal(resp.Body(), &npmResp); err != nil {
-		return "", nil, nil, fmt.Errorf("error parsing JSON response: %w", err)
+		return "", nil, fmt.Errorf("error parsing JSON response: %w", err)
 	}
 
 	etag := string(resp.Header.Peek("ETag"))
@@ -461,29 +516,5 @@ func getVersionsFromRegistry(registry, packageName string) (string, *semver.Vers
 		})
 	}
 
-	var latestVersion *semver.Version
-	if latest, ok := npmResp.DistTags["latest"]; ok {
-		latestVersion = semver.NewSemver(latest)
-	}
-
-	return etag, latestVersion, NewVersions().SetVersions(versions), nil
-}
-
-func headEtagFromRegistry(registry, packageName string) (string, error) {
-	npmConfig, err := parseNpmrc()
-	if err != nil {
-		return "", fmt.Errorf("error parsing .npmrc: %w", err)
-	}
-
-	resp, err := makeRegistryRequest("HEAD", registry, packageName, npmConfig)
-	if err != nil {
-		return "", err
-	}
-	defer fasthttp.ReleaseResponse(resp)
-
-	if resp.StatusCode() != fasthttp.StatusOK {
-		return "", fmt.Errorf("%w: status %d", ErrRegistryResponse, resp.StatusCode())
-	}
-
-	return string(resp.Header.Peek("ETag")), nil
+	return etag, NewVersions().SetVersions(versions), nil
 }

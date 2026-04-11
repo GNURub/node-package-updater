@@ -31,7 +31,6 @@ const (
 
 // VersionManager gestiona la lógica de actualización de versiones
 type VersionManager struct {
-	isLatest       bool            // indica si la versión actual es 'latest', '*' o vacía
 	currentVersion *semver.Version // versión actual del paquete
 	versions       []*Version      // lista de versiones disponibles
 }
@@ -58,15 +57,9 @@ func NewVersionManager(currentVersion *semver.Version, versions *Versions, flags
 	}
 
 	return &VersionManager{
-		isLatest:       isLatestVersion(currentVersion.String()),
 		currentVersion: currentVersion,
 		versions:       vs,
 	}, nil
-}
-
-// isLatestVersion verifica si una versión es considerada "latest"
-func isLatestVersion(version string) bool {
-	return version == "latest" || version == "*" || version == ""
 }
 
 // GetUpdatedVersion determina la siguiente versión a la que actualizar
