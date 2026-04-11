@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/semver"
+	"github.com/GNURub/node-package-updater/internal/styles"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -15,6 +18,15 @@ import (
 // UI Constants and styles
 const (
 	tickDuration = time.Second
+)
+
+// AuditRunner is a function that audits dependencies in the background.
+// Implementations should call onResult for each dependency as results arrive.
+// The ctx is cancelled when the user closes the TUI — respect it.
+type AuditRunner func(
+	ctx context.Context,
+	deps dependency.Dependencies,
+	onResult func(index int, status dependency.AuditStatus, severity string, count int),
 )
 
 var (
@@ -49,6 +61,14 @@ const (
 	versionsView
 )
 
+// auditResultMsg is sent from the background audit goroutine to the model.
+type auditResultMsg struct {
+	Index    int
+	Status   dependency.AuditStatus
+	Severity string
+	Count    int
+}
+
 type model struct {
 	state           sessionState
 	dependencies    dependency.Dependencies
@@ -57,6 +77,8 @@ type model struct {
 	done            bool
 	dependencyTable table.Model
 	versionsTable   table.Model
+	spinner         spinner.Model
+	auditCancel     context.CancelFunc
 }
 
 type tickMsg struct{}
@@ -65,11 +87,12 @@ type tickMsg struct{}
 var (
 	dependencyTableColumns = []table.Column{
 		{Title: "", Width: 2},
-		{Title: "Dependency", Width: 30},
+		{Title: "Dependency", Width: 26},
 		{Title: "Current Version", Width: 15},
-		{Title: "New Version", Width: 40},
-		{Title: "Environment", Width: 15},
-		{Title: "Workspace", Width: 20},
+		{Title: "New Version", Width: 28},
+		{Title: "Security", Width: 14},
+		{Title: "Environment", Width: 12},
+		{Title: "Workspace", Width: 18},
 	}
 
 	versionsTableColumns = []table.Column{
@@ -113,6 +136,23 @@ func drawStyleForNewVersion(dep *dependency.Dependency) string {
 	return v
 }
 
+// drawSecurityCell renders the security column cell for a dependency.
+// spin is the current spinner frame string to show while scanning.
+func drawSecurityCell(dep *dependency.Dependency, spin string) string {
+	status, severity, count := dep.SnapshotAudit()
+	switch status {
+	case dependency.AuditPending, dependency.AuditScanning:
+		return styles.MutedStyle.Render(spin + " scanning")
+	case dependency.AuditClean:
+		return styles.SuccessStyle.Render("✓ safe")
+	case dependency.AuditVulnerable:
+		return fmt.Sprintf("⚠ %s ×%d", styles.SeverityForeground(severity), count)
+	case dependency.AuditError:
+		return styles.MutedStyle.Render("? unknown")
+	}
+	return ""
+}
+
 func (m *model) handleSelectionCommand(selector func(*dependency.Dependency) bool) {
 	for i, dep := range m.dependencies {
 		if selector(dep) {
@@ -123,7 +163,7 @@ func (m *model) handleSelectionCommand(selector func(*dependency.Dependency) boo
 
 // Model methods
 func (m model) Init() tea.Cmd {
-	return tick()
+	return tea.Batch(tick(), m.spinner.Tick)
 }
 
 func (m model) updateVersions(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -173,6 +213,11 @@ func (m model) updateDeps(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+b":
 			m.handleSelectionCommand(func(dep *dependency.Dependency) bool {
 				return dep.CurrentVersion.Diff(dep.NextVersion.Version) == semver.Minor
+			})
+		case "ctrl+v":
+			m.handleSelectionCommand(func(dep *dependency.Dependency) bool {
+				st, _, _ := dep.SnapshotAudit()
+				return st == dependency.AuditVulnerable
 			})
 		case "enter":
 			m.done = true
@@ -257,6 +302,23 @@ func (m *model) findCurrentVersionIndex(cursor int) int {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case auditResultMsg:
+		dep := m.dependencies[msg.Index]
+		switch msg.Status {
+		case dependency.AuditClean:
+			dep.SetAuditClean()
+		case dependency.AuditVulnerable:
+			dep.SetAuditResult(msg.Severity, msg.Count)
+		default:
+			dep.SetAuditError()
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
@@ -297,6 +359,7 @@ func (m model) View() string {
 
 func (m *model) updateDependencyTableRows() {
 	rows := m.dependencyTable.Rows()
+	spin := m.spinner.View()
 	for i := range rows {
 		if _, ok := m.selected[i]; ok {
 			rows[i][0] = "✓"
@@ -304,6 +367,7 @@ func (m *model) updateDependencyTableRows() {
 			rows[i][0] = " "
 		}
 		rows[i][3] = drawStyleForNewVersion(m.dependencies[i])
+		rows[i][4] = drawSecurityCell(m.dependencies[i], spin)
 	}
 	m.dependencyTable.SetRows(rows)
 }
@@ -319,16 +383,37 @@ func (m model) getDepsViewFooter() string {
 		"↑/↓: navigate • space|enter: select • ctrl+a: select all • " +
 			"ctrl+z: select only prod • ctrl+x: select patchs • " +
 			"ctrl+b: select minors • ctrl+d: select only dev • " +
-			"ctrl+u: unselect all • q|ctrl+c: exit\n",
+			"ctrl+v: select vulnerable • ctrl+u: unselect all • q|ctrl+c: exit\n",
 	)
 }
 
-// SelectDependencies is the main entry point for the UI
-func SelectDependencies(deps dependency.Dependencies) (dependency.Dependencies, error) {
+// SelectDependencies is the main entry point for the interactive selector UI.
+// If auditRunner is non-nil it will be run in a background goroutine to
+// populate the Security column while the user interacts with the table.
+func SelectDependencies(deps dependency.Dependencies, auditRunner AuditRunner) (dependency.Dependencies, error) {
 	m := createInitialModel(deps)
+
+	auditCtx, auditCancel := context.WithCancel(context.Background())
+	m.auditCancel = auditCancel
+
 	p := tea.NewProgram(m)
 
+	if auditRunner != nil {
+		go func() {
+			auditRunner(auditCtx, deps, func(index int, status dependency.AuditStatus, severity string, count int) {
+				p.Send(auditResultMsg{
+					Index:    index,
+					Status:   status,
+					Severity: severity,
+					Count:    count,
+				})
+			})
+		}()
+	}
+
 	finalModel, err := p.Run()
+	auditCancel() // stop any in-flight audit work when the user exits
+
 	if err != nil {
 		return nil, fmt.Errorf("error running bubbletea program: %w", err)
 	}
@@ -353,6 +438,7 @@ func createInitialModel(deps dependency.Dependencies) model {
 			dep.PackageName,
 			dep.CurrentVersion.String(),
 			drawStyleForNewVersion(dep),
+			"",
 			dep.Env.ToEnv(),
 			dep.Workspace,
 		})
@@ -375,11 +461,16 @@ func createInitialModel(deps dependency.Dependencies) model {
 	)
 	versionsTable.SetStyles(tableStyles)
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#63B0B8"))
+
 	return model{
 		state:           depsView,
 		dependencies:    deps,
 		selected:        make(map[int]struct{}),
 		dependencyTable: dependencyTable,
 		versionsTable:   versionsTable,
+		spinner:         sp,
 	}
 }

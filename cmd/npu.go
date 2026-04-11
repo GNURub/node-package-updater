@@ -1,14 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 
+	"github.com/GNURub/node-package-updater/internal/audit"
 	"github.com/GNURub/node-package-updater/internal/cache"
 	"github.com/GNURub/node-package-updater/internal/cli"
+	"github.com/GNURub/node-package-updater/internal/dependency"
 	"github.com/GNURub/node-package-updater/internal/packagejson"
 	"github.com/GNURub/node-package-updater/internal/packagemanager"
 	"github.com/GNURub/node-package-updater/internal/styles"
+	"github.com/GNURub/node-package-updater/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -101,7 +105,16 @@ func Exec() error {
 			return
 		}
 
-		if err := pkg.ProcessDependencies(flags); err != nil {
+		osvClient := audit.NewOSVClient()
+		auditRunner := ui.AuditRunner(func(
+			ctx context.Context,
+			deps dependency.Dependencies,
+			onResult func(int, dependency.AuditStatus, string, int),
+		) {
+			audit.AuditDependencies(ctx, deps, cache, osvClient, onResult)
+		})
+
+		if err := pkg.ProcessDependencies(flags, auditRunner); err != nil {
 			fmt.Println(styles.ErrorStyle.Render(err.Error()))
 			return
 		}

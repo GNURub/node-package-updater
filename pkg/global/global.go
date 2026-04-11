@@ -17,8 +17,8 @@ func UpdateGlobalDependencies(flags *cli.Flags) error {
 		return fmt.Errorf("failed to get global dependencies: %w", err)
 	}
 
-	// Actualizamos las dependencias
-	dependencies, _ := packagejson.UpdateDependencies(globalDeps, flags, nil)
+	// Actualizamos las dependencias (sin TUI interactivo, sin audit en background)
+	dependencies, _ := packagejson.UpdateDependencies(globalDeps, flags, nil, nil)
 
 	if len(dependencies["global"]) == 0 {
 		fmt.Println("🎉! All global dependencies updated successfully!")

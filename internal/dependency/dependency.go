@@ -230,6 +230,17 @@ func (versions *Versions) Restore(pkgName string, cache *cache.Cache) error {
 	return nil
 }
 
+// AuditStatus represents the state of a vulnerability scan for a dependency.
+type AuditStatus uint8
+
+const (
+	AuditPending    AuditStatus = iota // not yet queried
+	AuditScanning                      // in-flight (phase 1 or 2)
+	AuditClean                         // no known vulnerabilities
+	AuditVulnerable                    // vulnerabilities found
+	AuditError                         // network or parse failure
+)
+
 // Dependency represents a package dependency with version information
 type Dependency struct {
 	Versions          *Versions
@@ -241,6 +252,49 @@ type Dependency struct {
 	Env               constants.DepEnv
 	Workspace         string
 	mu                sync.RWMutex
+
+	// Audit state — written from background goroutines, read by the UI.
+	// All access must go through the helper methods below (they hold mu).
+	AuditStatus   AuditStatus
+	AuditSeverity string // "low" | "moderate" | "high" | "critical" | "unknown"
+	AuditFindings int    // number of distinct vulnerabilities
+}
+
+// SetAuditScanning marks the dependency as being actively scanned.
+func (d *Dependency) SetAuditScanning() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.AuditStatus = AuditScanning
+}
+
+// SetAuditClean marks the dependency as having no known vulnerabilities.
+func (d *Dependency) SetAuditClean() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.AuditStatus = AuditClean
+}
+
+// SetAuditResult marks the dependency as vulnerable with the given severity and count.
+func (d *Dependency) SetAuditResult(severity string, count int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.AuditStatus = AuditVulnerable
+	d.AuditSeverity = severity
+	d.AuditFindings = count
+}
+
+// SetAuditError marks the dependency as having failed the audit.
+func (d *Dependency) SetAuditError() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.AuditStatus = AuditError
+}
+
+// SnapshotAudit returns the current audit state atomically for rendering.
+func (d *Dependency) SnapshotAudit() (AuditStatus, string, int) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.AuditStatus, d.AuditSeverity, d.AuditFindings
 }
 
 type Dependencies []*Dependency

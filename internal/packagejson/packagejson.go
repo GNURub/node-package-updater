@@ -323,7 +323,7 @@ func isPathWithin(targetPath, basePath string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
 
-func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
+func (p *PackageJSON) ProcessDependencies(flags *cli.Flags, auditRunner ui.AuditRunner) error {
 	var allDeps dependency.Dependencies
 
 	for workspace, pkg := range p.WorkspacesPkgs {
@@ -386,7 +386,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	// sort dependencies
 	sort.Sort(allDeps)
 
-	depsByWorkspace, err := UpdateDependencies(allDeps, flags, p.cache)
+	depsByWorkspace, err := UpdateDependencies(allDeps, flags, p.cache, auditRunner)
 	if err != nil {
 		return err
 	}
@@ -417,7 +417,7 @@ func (p *PackageJSON) ProcessDependencies(flags *cli.Flags) error {
 	return nil
 }
 
-func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache *cache.Cache) (map[string]dependency.Dependencies, error) {
+func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache *cache.Cache, auditRunner ui.AuditRunner) (map[string]dependency.Dependencies, error) {
 	totalDeps := len(allDeps)
 	if totalDeps == 0 {
 		return nil, errors.New("no dependencies to update")
@@ -485,7 +485,7 @@ func UpdateDependencies(allDeps dependency.Dependencies, flags *cli.Flags, cache
 	}
 
 	if !flags.NoInteractive {
-		depsWithNewVersion, _ = ui.SelectDependencies(depsWithNewVersion)
+		depsWithNewVersion, _ = ui.SelectDependencies(depsWithNewVersion, auditRunner)
 	} else {
 		for _, dep := range depsWithNewVersion {
 			dep.HaveToUpdate = true
