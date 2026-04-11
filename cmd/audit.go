@@ -19,6 +19,7 @@ var (
 	auditDownloadDB     bool
 	auditDBPath         string
 	auditPackageManager string
+	auditNoTUI          bool
 )
 
 var auditCmd = &cobra.Command{
@@ -57,7 +58,8 @@ var auditCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if auditOutputFile != "" {
+		switch {
+		case auditOutputFile != "":
 			if err := os.MkdirAll(filepath.Dir(auditOutputFile), 0o755); err != nil {
 				fmt.Println(styles.ErrorStyle.Render(err.Error()))
 				os.Exit(1)
@@ -67,7 +69,18 @@ var auditCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			fmt.Printf("📝 Audit report written to %s\n", auditOutputFile)
-		} else {
+
+		case format == audit.FormatText && !auditNoTUI && result.Summary.TotalFindings > 0 && isStdoutTTY():
+			if err := audit.RunInteractive(result); err != nil {
+				fmt.Println(styles.ErrorStyle.Render(err.Error()))
+				os.Exit(1)
+			}
+			fmt.Println(styles.ErrorStyle.Bold(true).Render(
+				fmt.Sprintf("🚨 %d vulnerability finding(s) across %d package(s)",
+					result.Summary.TotalFindings, result.Summary.AffectedPackages),
+			))
+
+		default:
 			fmt.Println(string(output))
 		}
 
@@ -75,6 +88,14 @@ var auditCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
+}
+
+func isStdoutTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 func init() {
@@ -85,6 +106,7 @@ func init() {
 	auditCmd.Flags().BoolVar(&auditDownloadDB, "download-db", false, "Download/update the offline OSV database")
 	auditCmd.Flags().StringVar(&auditDBPath, "db-path", "", "Path to the local OSV database")
 	auditCmd.Flags().StringVarP(&auditPackageManager, "packageManager", "M", "", "Package manager override for target discovery")
+	auditCmd.Flags().BoolVar(&auditNoTUI, "no-tui", false, "Disable the interactive TUI and print the styled report instead")
 
 	rootCmd.AddCommand(auditCmd)
 }
