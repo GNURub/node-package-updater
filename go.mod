@@ -15,9 +15,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/diskfs/go-diskfs => github.com/diskfs/go-diskfs v1.7.0
+exclude github.com/opencontainers/runtime-spec v1.2.1
 
-replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.1.0
+exclude github.com/opencontainers/runtime-spec v1.3.0
 
 require (
 	bitbucket.org/creachadair/stringset v0.0.14 // indirect
@@ -73,7 +73,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/deitch/magic v0.0.0-20240306090643-c67ab88f10cb // indirect
-	github.com/diskfs/go-diskfs v1.9.1 // indirect
+	github.com/diskfs/go-diskfs v1.7.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/docker/cli v29.4.0+incompatible // indirect
@@ -141,7 +141,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/opencontainers/runtime-spec v1.3.0 // indirect
+	github.com/opencontainers/runtime-spec v1.1.0 // indirect
 	github.com/opencontainers/selinux v1.13.1 // indirect
 	github.com/ossf/osv-schema/bindings/go v0.0.0-20260331231022-2a6a0b9b0ccd // indirect
 	github.com/owenrumney/go-sarif/v3 v3.3.0 // indirect
