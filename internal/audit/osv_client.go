@@ -26,6 +26,8 @@ type BatchResult struct {
 type Vulnerability struct {
 	ID               string
 	Summary          string
+	Details          string
+	Aliases          []string
 	DatabaseSeverity string   // database_specific.severity — human-readable
 	CVSSVectors      []string // severity[].score when type is CVSS_V3/V4
 }
@@ -84,6 +86,8 @@ type osvSeverityEntry struct {
 type osvVuln struct {
 	ID      string `json:"id"`
 	Summary string `json:"summary"`
+	Details string `json:"details"`
+	Aliases []string `json:"aliases"`
 	Severity []osvSeverityEntry `json:"severity"`
 	DatabaseSpecific struct {
 		Severity string `json:"severity"`
@@ -175,6 +179,8 @@ func (c *OSVClient) QueryPackage(ctx context.Context, name, version string) ([]V
 		vulns[i] = Vulnerability{
 			ID:               v.ID,
 			Summary:          v.Summary,
+			Details:          v.Details,
+			Aliases:          v.Aliases,
 			DatabaseSeverity: v.DatabaseSpecific.Severity,
 			CVSSVectors:      vectors,
 		}

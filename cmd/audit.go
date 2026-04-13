@@ -25,7 +25,7 @@ var (
 var auditCmd = &cobra.Command{
 	Use:   "audit [path]",
 	Short: "Audit project dependencies for known vulnerabilities",
-	Long:  "Audit project dependencies for known vulnerabilities using an embedded osv-scanner integration.",
+	Long:  "Audit project dependencies for known vulnerabilities using the OSV API.",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		baseDir := auditDir
