@@ -26,14 +26,16 @@ jobs:
       - name: Extract version from tag
         id: extract_version
         run: |
-          # Extraer la versión desde el tag sin prefijo "v"
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
-          TAG_NAME="${TAG_NAME#v}"  # elimina la 'v' si existe
+          # Normaliza tags X.Y.Z y vX.Y.Z al formato X.Y.Z
+          RAW_TAG="${{ github.event.release.tag_name }}"
 
-          if [[ ! "$TAG_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "ERROR: Tag '$TAG_NAME' is not a valid semantic version (X.Y.Z)." >&2
+          if [[ "$RAW_TAG" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            TAG_NAME="${BASH_REMATCH[1]}"
+          else
+            echo "ERROR: Tag '$RAW_TAG' is not a valid semantic version (X.Y.Z or vX.Y.Z)." >&2
             exit 1
           fi
+
           echo "VERSION=$TAG_NAME" >> $GITHUB_ENV
           echo "Extracted version: $TAG_NAME"
 
@@ -54,7 +56,7 @@ jobs:
             OUTPUT="${OUTPUT}.exe"
           fi
           echo "Building binary for $GOOS/$GOARCH..."
-          go build -ldflags="-s -w -X 'github.com/GNURub/node-package-updater/internal/version.Version=${{ env.VERSION }}'" -o "$OUTPUT" cmd/npu/main.go
+          go build -ldflags="-s -w -X 'github.com/GNURub/node-package-updater/internal/version.Version=$VERSION'" -o "$OUTPUT" cmd/npu/main.go
           echo "Binary built at $OUTPUT"
 
       - name: Upload Release Asset
